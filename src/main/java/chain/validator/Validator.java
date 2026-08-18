@@ -18,12 +18,13 @@ public class Validator {
 	public void validate(Object bean) throws ValidateException, IllegalAccessException {
 		Class<?> beanClass = bean.getClass();
 		Field[] declaredFields = beanClass.getDeclaredFields();
+		ValidatorContext context = new ValidatorContext();
 		for (Field field : declaredFields) {
-			ValidatorContext context = new ValidatorContext();
 			field.setAccessible(true);
 			ValidatorHandlerChain chain = buildHandlerChain(field);
 			chain.validate(field.get(bean), context);
 		}
+		context.throwExceptionIfNecessary();
 	}
 
 	// 可以使用享元模式/工厂模式等进行优化
