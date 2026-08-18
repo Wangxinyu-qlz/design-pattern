@@ -1,7 +1,5 @@
 package chain.validator;
 
-import chain.exception.ValidateException;
-
 /**
  * @program: study
  * @author: Qiaolezi
@@ -9,5 +7,5 @@ import chain.exception.ValidateException;
  * @description:
  **/
 public interface ValidateHandler {
-	void validate(Object value) throws ValidateException;
+	void validate(Object value, ValidatorContext context);
 }

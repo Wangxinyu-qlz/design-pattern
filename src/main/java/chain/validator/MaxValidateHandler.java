@@ -16,10 +16,10 @@ public class MaxValidateHandler implements ValidateHandler {
 	}
 
 	@Override
-	public void validate(Object value) throws ValidateException {
+	public void validate(Object value, ValidatorContext context) throws ValidateException {
 		if(value instanceof Integer intVal) {
 			if(intVal > max)
-				throw new ValidateException("值为" + intVal + "不能大于" + max);
+				context.appendErrorMessage("值为" + intVal + "不能大于" + max);
 		}
 	}
 }

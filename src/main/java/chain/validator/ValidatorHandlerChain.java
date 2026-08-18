@@ -1,7 +1,5 @@
 package chain.validator;
 
-import chain.exception.ValidateException;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,18 +17,10 @@ public class ValidatorHandlerChain {
 		handlers.add(handler);
 	}
 
-	public void validate(Object bean) {
-		List<String> errorMessages = new ArrayList<>();
+	public void validate(Object bean, ValidatorContext context) {
 		for (ValidateHandler handler : handlers) {
-			try {
-				handler.validate(bean);
-			} catch (ValidateException e) {
-				errorMessages.add(e.getMessage());
-			}
+			handler.validate(bean, context);
 		}
-		if(errorMessages.isEmpty()) {
-			return;
-		}
-		throw new ValidateException(String.join(",", errorMessages));
+		context.throwExceptionIfNecessary();
 	}
 }

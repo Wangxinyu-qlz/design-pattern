@@ -6,8 +6,6 @@ import chain.annotation.Min;
 import chain.exception.ValidateException;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * @program: study
@@ -21,9 +19,10 @@ public class Validator {
 		Class<?> beanClass = bean.getClass();
 		Field[] declaredFields = beanClass.getDeclaredFields();
 		for (Field field : declaredFields) {
+			ValidatorContext context = new ValidatorContext();
 			field.setAccessible(true);
 			ValidatorHandlerChain chain = buildHandlerChain(field);
-			chain.validate(field.get(bean));
+			chain.validate(field.get(bean), context);
 		}
 	}
 
