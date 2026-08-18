@@ -6,8 +6,6 @@ import chain.annotation.Min;
 import chain.exception.ValidateException;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * @program: study
@@ -20,18 +18,14 @@ public class Validator {
 	public void validate(Object bean) throws ValidateException, IllegalAccessException {
 		Class<?> beanClass = bean.getClass();
 		Field[] declaredFields = beanClass.getDeclaredFields();
-		List<String> errorMessages = new ArrayList<>();
+		ValidationContext validationContext = new ValidationContext();
 		for (Field field : declaredFields) {
 			field.setAccessible(true);
 			ValidatorHandlerChain chain = buildHandlerChain(field);
-			ValidatorContext context = chain.validate(field.get(bean));
-			errorMessages.addAll(context.getErrorMessages());
+			chain.validate(field.get(bean), validationContext);
 		}
 
-		if(errorMessages.isEmpty()) {
-			return;
-		}
-		throw new ValidateException(String.join(";", errorMessages));
+		validationContext.throwExceptionIfNecessary();
 	}
 
 	// 可以使用享元模式/工厂模式等进行优化

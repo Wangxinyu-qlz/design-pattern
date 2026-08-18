@@ -7,5 +7,5 @@ package chain.validator;
  * @description:
  **/
 public interface ValidateHandler {
-	void validate(Object value, ValidatorContext context);
+	void validate(Object value, ChainExecutionContext context);
 }

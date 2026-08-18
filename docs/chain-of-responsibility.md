@@ -26,8 +26,9 @@ src/main/java/chain/
     ├── MinValidateHandler.java
     ├── ValidateHandler.java
     ├── Validator.java
-    ├── ValidatorContext.java
-    └── ValidatorHandlerChain.java
+    ├── ValidatorHandlerChain.java
+    ├── ChainExecutionContext.java
+    └── ValidationContext.java
 ```
 
 下面每个代码块都对应一个完整文件。为了避免重复，阶段中没有变化的文件沿用前一个阶段的完整文件；文章末尾还给出当前版本的全部源码。
@@ -1274,7 +1275,7 @@ Max(10)：18 超过 10，记录错误，doNext(18)
 
 之前 `Max` 失败后没有推进，`Min` 不会执行；现在失败只代表“记录错误”，不再代表“停止链”。
 
-### 优化前字段切换时为什么会停止
+### 第一种方案的边界：优化前字段切换时为什么会停止
 
 即使字段内部的节点都能继续，优化前的 `Validator` 仍然会在每条字段链结束时抛出异常：
 
@@ -1446,3 +1447,301 @@ public class Validator {
 这次调整只改变异常边界，没有改变字段内部的责任链：字段链仍由 `doNext()` 推进，对象级 `Validator` 只在所有字段处理完后统一判定。
 
 如果后续需要让调用方知道错误属于哪个字段，建议把 `List<String>` 换成结构化结果，例如 `ValidationError(fieldName, ruleName, message)`，最后再将结构化结果格式化成异常消息。这样更适合前端展示、日志检索和错误码扩展。
+
+## 第二种解决方案：总上下文与字段链执行上下文分离
+
+上一节的做法已经能聚合所有字段错误，但 `Validator` 需要从字段上下文中取出错误列表，再自己组织最终异常。更完整的设计是建立一个对象级总上下文：
+
+```text
+ValidationContext                 对象级，总错误收集和最终抛错
+    └── ChainExecutionContext     字段级，index/value/shouldStop/doNext
+            └── 当前字段的 ValidateHandler 链
+```
+
+这样可以让 `throwExceptionIfNecessary()` 回到唯一、明确的异常边界：
+
+```text
+Validator 创建一个 ValidationContext
+    -> 遍历所有字段
+        -> 为当前字段创建 ChainExecutionContext
+        -> 执行当前字段的处理器链
+        -> 错误写入同一个 ValidationContext
+    -> 所有字段结束
+    -> ValidationContext.throwExceptionIfNecessary()
+```
+
+不能直接把原来的执行上下文在所有字段之间复用，因为它同时保存了三类不同生命周期的状态：
+
+| 状态 | 生命周期 | 是否应该跨字段共享 |
+| --- | --- | --- |
+| 错误列表 | 整个对象校验 | 是 |
+| `index` | 当前字段链 | 否 |
+| `value` | 当前字段链 | 否 |
+| `shouldStop` | 当前字段链 | 否 |
+
+### `src/main/java/chain/validator/ValidationContext.java`
+
+```java
+package chain.validator;
+
+import chain.exception.ValidateException;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 保存整个对象校验过程中的结果。
+ */
+public class ValidationContext {
+    private final List<String> errorMessages = new ArrayList<>();
+
+    public void appendErrorMessage(String errorMessage) {
+        errorMessages.add(errorMessage);
+    }
+
+    public void throwExceptionIfNecessary() throws ValidateException {
+        if (errorMessages.isEmpty()) {
+            return;
+        }
+        throw new ValidateException(String.join(";", errorMessages));
+    }
+}
+```
+
+### `src/main/java/chain/validator/ChainExecutionContext.java`
+
+```java
+package chain.validator;
+
+/**
+ * 保存一条字段责任链的执行状态。
+ */
+public class ChainExecutionContext {
+    private final ValidationContext validationContext;
+    private boolean shouldStop;
+    private int index;
+    private Object value;
+
+    public ChainExecutionContext(
+            Object value,
+            ValidationContext validationContext
+    ) {
+        this.value = value;
+        this.validationContext = validationContext;
+    }
+
+    public void appendErrorMessage(String errorMessage) {
+        validationContext.appendErrorMessage(errorMessage);
+    }
+
+    public boolean shouldStop() {
+        return shouldStop;
+    }
+
+    public void stopChain() {
+        shouldStop = true;
+    }
+
+    public int getCurrentIndex() {
+        return index;
+    }
+
+    public Object getValue() {
+        return value;
+    }
+
+    public void doNext(Object value) {
+        index++;
+        this.value = value;
+    }
+}
+```
+
+### `src/main/java/chain/validator/ValidateHandler.java`
+
+```java
+package chain.validator;
+
+public interface ValidateHandler {
+    void validate(Object value, ChainExecutionContext context);
+}
+```
+
+处理器只依赖字段链执行上下文。它可以记录错误，但不直接持有对象级上下文，也不负责最终抛异常。
+
+### `src/main/java/chain/validator/MaxValidateHandler.java`
+
+```java
+package chain.validator;
+
+import chain.exception.ValidateException;
+
+public class MaxValidateHandler implements ValidateHandler {
+    private final int max;
+
+    public MaxValidateHandler(int max) {
+        this.max = max;
+    }
+
+    @Override
+    public void validate(Object value, ChainExecutionContext context)
+            throws ValidateException {
+        if (value instanceof Integer intValue) {
+            if (intValue > max) {
+                context.appendErrorMessage("值为" + intValue + "不能大于" + max);
+            }
+            context.doNext(value);
+        }
+    }
+}
+```
+
+### `src/main/java/chain/validator/MinValidateHandler.java`
+
+```java
+package chain.validator;
+
+import chain.exception.ValidateException;
+
+public class MinValidateHandler implements ValidateHandler {
+    private final int min;
+
+    public MinValidateHandler(int min) {
+        this.min = min;
+    }
+
+    @Override
+    public void validate(Object value, ChainExecutionContext context)
+            throws ValidateException {
+        if (value instanceof Integer intValue) {
+            if (intValue < min) {
+                context.appendErrorMessage("值为" + intValue + "不能小于" + min);
+            }
+            context.doNext(value);
+        }
+    }
+}
+```
+
+### `src/main/java/chain/validator/LengthValidateHandler.java`
+
+```java
+package chain.validator;
+
+import chain.exception.ValidateException;
+
+public class LengthValidateHandler implements ValidateHandler {
+    private final int length;
+
+    public LengthValidateHandler(int length) {
+        this.length = length;
+    }
+
+    @Override
+    public void validate(Object value, ChainExecutionContext context)
+            throws ValidateException {
+        if (value instanceof String stringValue) {
+            if (stringValue.length() > length) {
+                context.appendErrorMessage(
+                        "长度为" + stringValue.length() + "不能大于" + length);
+            }
+            context.doNext(value);
+        }
+    }
+}
+```
+
+### `src/main/java/chain/validator/ValidatorHandlerChain.java`
+
+```java
+package chain.validator;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ValidatorHandlerChain {
+    private final List<ValidateHandler> handlers = new ArrayList<>();
+
+    public void addLastHandler(ValidateHandler handler) {
+        handlers.add(handler);
+    }
+
+    public void validate(Object value, ValidationContext validationContext) {
+        ChainExecutionContext context =
+                new ChainExecutionContext(value, validationContext);
+
+        while (true) {
+            int index = context.getCurrentIndex();
+            if (index == handlers.size()) {
+                break;
+            }
+
+            ValidateHandler handler = handlers.get(index);
+            handler.validate(context.getValue(), context);
+
+            // 当前处理器没有调用 doNext()，当前字段链停止
+            if (index == context.getCurrentIndex()) {
+                break;
+            }
+        }
+    }
+}
+```
+
+### `src/main/java/chain/validator/Validator.java`
+
+```java
+package chain.validator;
+
+import chain.annotation.Length;
+import chain.annotation.Max;
+import chain.annotation.Min;
+import chain.exception.ValidateException;
+
+import java.lang.reflect.Field;
+
+public class Validator {
+
+    public void validate(Object bean)
+            throws ValidateException, IllegalAccessException {
+        ValidationContext validationContext = new ValidationContext();
+
+        for (Field field : bean.getClass().getDeclaredFields()) {
+            field.setAccessible(true);
+            ValidatorHandlerChain chain = buildHandlerChain(field);
+            chain.validate(field.get(bean), validationContext);
+        }
+
+        validationContext.throwExceptionIfNecessary();
+    }
+
+    private ValidatorHandlerChain buildHandlerChain(Field field) {
+        ValidatorHandlerChain chain = new ValidatorHandlerChain();
+
+        Max max = field.getAnnotation(Max.class);
+        if (max != null) {
+            chain.addLastHandler(new MaxValidateHandler(max.value()));
+        }
+
+        Min min = field.getAnnotation(Min.class);
+        if (min != null) {
+            chain.addLastHandler(new MinValidateHandler(min.value()));
+        }
+
+        Length length = field.getAnnotation(Length.class);
+        if (length != null) {
+            chain.addLastHandler(new LengthValidateHandler(length.value()));
+        }
+
+        return chain;
+    }
+}
+```
+
+这套结构保留了字段链的 `doNext()` 语义，同时让对象级上下文成为唯一的错误出口。当前 `User(18, "qiaolezi")` 会在所有字段处理完成后统一得到：
+
+```text
+值为18不能大于10;值为18不能小于30;长度为8不能大于4
+```
+
+需要继续注意：`ValidatorHandlerChain` 当前仍然通过索引是否变化判断停止，尚未把 `shouldStop()` 接入循环；如果后续要求 `stopChain()` 优先于 `doNext()`，应在处理器调用后增加显式的停止判断。

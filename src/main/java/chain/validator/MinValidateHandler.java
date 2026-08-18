@@ -16,7 +16,7 @@ public class MinValidateHandler implements ValidateHandler {
 	}
 
 	@Override
-	public void validate(Object value, ValidatorContext context) throws ValidateException {
+	public void validate(Object value, ChainExecutionContext context) throws ValidateException {
 		if(value instanceof Integer intVal) {
 			if(intVal < min) {
 				context.appendErrorMessage("值为" + intVal + "不能小于" + min);

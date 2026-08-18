@@ -16,7 +16,7 @@ public class LengthValidateHandler implements ValidateHandler {
 	}
 
 	@Override
-	public void validate(Object value, ValidatorContext context) throws ValidateException {
+	public void validate(Object value, ChainExecutionContext context) throws ValidateException {
 		if(value instanceof String StrVal) {
 			if(StrVal.length() > length) {
 				context.appendErrorMessage("长度为" + StrVal.length() + "不能大于" + length);
