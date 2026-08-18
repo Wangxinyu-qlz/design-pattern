@@ -1,6 +1,6 @@
 # 从字段校验到责任链：代码如何一步步演进
 
-本文用一个基于注解的 `User` 校验器，完整演示责任链是怎样从固定流程演进出来的。重点不是背诵某个类名，而是观察每次代码变更解决了什么问题：规则如何拆开、节点如何排列、错误如何收集，以及节点如何决定继续还是停止。
+本文用一个基于注解的 `User` 校验器，完整演示责任链是怎样从固定流程演进出来的，阐述每次代码变更解决了什么问题：规则如何拆开、节点如何排列、错误如何收集，以及节点如何决定继续还是停止。
 
 示例约束如下：
 
@@ -21,6 +21,17 @@ src/main/java/chain/
 │   └── Order.java
 ├── dto/User.java
 ├── exception/ValidateException.java
+├── pipeline/
+│   ├── ApplyDiscountStage.java
+│   ├── CalculateSubtotalStage.java
+│   ├── CalculateTaxStage.java
+│   ├── FinalizeOrderStage.java
+│   ├── OrderProcess.java
+│   ├── PipelineContext.java
+│   ├── PipelineMain.java
+│   ├── PipelineResult.java
+│   ├── PipelineStage.java
+│   └── ProcessingPipeline.java
 └── validator/
     ├── LengthValidateHandler.java
     ├── MaxValidateHandler.java
@@ -2250,3 +2261,393 @@ public interface ValidateHandlerFactory {
 ```
 
 因此，Spring 的 `@Order` 解决的是“容器如何排列 Bean”，而当前自定义 `@Order` 解决的是“责任链如何排列本次字段校验节点”。两者可以使用相同的数值约定，但负责排序的对象和生命周期不同。
+
+## 另一条演进方向：从责任链到流水线
+
+前面的字段校验属于典型的责任链：每个节点处理后，由节点决定是否调用 `doNext()`。节点既负责业务处理，也拥有“继续还是停止”的控制权。
+
+但有些业务不是“找到某个节点处理即可”，而是“让多个节点依次加工同一个对象”。例如一笔订单需要依次完成：
+
+```text
+订单草稿
+    -> 计算商品小计
+    -> 计算折扣
+    -> 计算税额
+    -> 计算应付金额并完成订单
+```
+
+这时更适合把责任链演进成流水线（Pipeline）：
+
+- 每个节点都有明确的加工职责；
+- 每个节点接收上一个节点的输出，并返回新的输出；
+- 正常情况下所有节点都会执行；
+- 节点不调用 `doNext()`，由流水线容器统一推进。
+
+### 为什么由容器推进
+
+责任链中，“是否还需要其他处理者”是节点的业务决策，所以 `doNext()` 放在节点里是合理的。流水线中，“按工序执行全部节点”是容器的结构性保证。如果仍让节点手动调用 `doNext()`，某个节点遗漏调用就会让后续工序静默失效。
+
+因此，这里由 `ProcessingPipeline` 遍历节点，节点只关心两件事：读取当前对象，返回加工后的对象。
+
+### 完整代码
+
+#### PipelineStage.java
+
+```java
+package chain.pipeline;
+
+/**
+ * 流水线节点：接收上一个节点的输出，并返回下一个节点的输入。
+ */
+public interface PipelineStage<T> {
+    String name();
+
+    T process(T input, PipelineContext context);
+}
+```
+
+#### PipelineContext.java
+
+```java
+package chain.pipeline;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 保存一次流水线执行中的公共信息。
+ */
+public class PipelineContext {
+    private final List<String> trace = new ArrayList<>();
+
+    public void addTrace(String stage, String message) {
+        trace.add(stage + ": " + message);
+    }
+
+    List<String> snapshot() {
+        return List.copyOf(trace);
+    }
+}
+```
+
+`PipelineContext` 是一次执行级别的总上下文。示例中它只记录轨迹，实际项目还可以放入请求编号、租户信息、开始时间和各节点共享的附加数据。它与被加工的 `OrderProcess` 是两个不同概念：前者描述“本次执行”，后者描述“业务对象当前状态”。
+
+#### PipelineResult.java
+
+```java
+package chain.pipeline;
+
+import java.util.List;
+import java.util.Objects;
+
+public record PipelineResult<T>(T value, List<String> trace) {
+    public PipelineResult {
+        Objects.requireNonNull(value, "value");
+        trace = List.copyOf(trace);
+    }
+}
+```
+
+#### ProcessingPipeline.java
+
+```java
+package chain.pipeline;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * 依次执行全部节点，并把每个节点的输出传给下一个节点。
+ */
+public class ProcessingPipeline<T> {
+    private final List<PipelineStage<T>> stages = new ArrayList<>();
+
+    public ProcessingPipeline<T> addLast(PipelineStage<T> stage) {
+        stages.add(Objects.requireNonNull(stage, "stage"));
+        return this;
+    }
+
+    public PipelineResult<T> execute(T input) {
+        T current = Objects.requireNonNull(input, "input");
+        PipelineContext context = new PipelineContext();
+
+        for (PipelineStage<T> stage : stages) {
+            context.addTrace(stage.name(), "start");
+            current = Objects.requireNonNull(
+                    stage.process(current, context),
+                    stage.name() + " returned null");
+            context.addTrace(stage.name(), "completed");
+        }
+
+        return new PipelineResult<>(current, context.snapshot());
+    }
+}
+```
+
+这里使用 `ArrayList` 保存节点。流水线的典型用法是“组装一次，按顺序遍历很多次”，数组结构的顺序遍历简单且对缓存更友好。如果业务需要频繁在中间插入或删除节点，可以考虑链表；但运行期频繁改链本身就会带来并发和可预测性问题，通常更适合重新组装一条新流水线。
+
+#### OrderProcess.java
+
+```java
+package chain.pipeline;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Objects;
+
+/**
+ * 在流水线中逐步补全金额信息的不可变订单对象。
+ */
+public record OrderProcess(
+        String orderNo,
+        BigDecimal unitPrice,
+        int quantity,
+        BigDecimal subtotal,
+        BigDecimal discount,
+        BigDecimal tax,
+        BigDecimal payable,
+        String status
+) {
+    public OrderProcess {
+        Objects.requireNonNull(orderNo, "orderNo");
+        Objects.requireNonNull(unitPrice, "unitPrice");
+        Objects.requireNonNull(subtotal, "subtotal");
+        Objects.requireNonNull(discount, "discount");
+        Objects.requireNonNull(tax, "tax");
+        Objects.requireNonNull(payable, "payable");
+        Objects.requireNonNull(status, "status");
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("quantity must be greater than zero");
+        }
+    }
+
+    public static OrderProcess draft(String orderNo, BigDecimal unitPrice, int quantity) {
+        BigDecimal zero = money(BigDecimal.ZERO);
+        return new OrderProcess(
+                orderNo,
+                money(unitPrice),
+                quantity,
+                zero,
+                zero,
+                zero,
+                zero,
+                "DRAFT");
+    }
+
+    public OrderProcess withSubtotal(BigDecimal value) {
+        return new OrderProcess(
+                orderNo, unitPrice, quantity, money(value), discount, tax, payable, status);
+    }
+
+    public OrderProcess withDiscount(BigDecimal value) {
+        return new OrderProcess(
+                orderNo, unitPrice, quantity, subtotal, money(value), tax, payable, status);
+    }
+
+    public OrderProcess withTax(BigDecimal value) {
+        return new OrderProcess(
+                orderNo, unitPrice, quantity, subtotal, discount, money(value), payable, status);
+    }
+
+    public OrderProcess complete(BigDecimal value) {
+        return new OrderProcess(
+                orderNo, unitPrice, quantity, subtotal, discount, tax,
+                money(value), "READY_TO_PAY");
+    }
+
+    private static BigDecimal money(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+}
+```
+
+让四个节点每次返回一个新的 `OrderProcess`。这样可以从方法签名上看出数据流向，也避免某个节点意外改写与自己无关的字段。
+
+#### CalculateSubtotalStage.java
+
+```java
+package chain.pipeline;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+public class CalculateSubtotalStage implements PipelineStage<OrderProcess> {
+    @Override
+    public String name() {
+        return "calculate-subtotal";
+    }
+
+    @Override
+    public OrderProcess process(OrderProcess input, PipelineContext context) {
+        BigDecimal subtotal = input.unitPrice()
+                .multiply(BigDecimal.valueOf(input.quantity()))
+                .setScale(2, RoundingMode.HALF_UP);
+        context.addTrace(name(), "subtotal=" + subtotal);
+        return input.withSubtotal(subtotal);
+    }
+}
+```
+
+#### ApplyDiscountStage.java
+
+```java
+package chain.pipeline;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+public class ApplyDiscountStage implements PipelineStage<OrderProcess> {
+    private static final BigDecimal THRESHOLD = new BigDecimal("100.00");
+    private static final BigDecimal DISCOUNT_RATE = new BigDecimal("0.10");
+
+    @Override
+    public String name() {
+        return "apply-discount";
+    }
+
+    @Override
+    public OrderProcess process(OrderProcess input, PipelineContext context) {
+        BigDecimal discount = BigDecimal.ZERO;
+        if (input.subtotal().compareTo(THRESHOLD) >= 0) {
+            discount = input.subtotal().multiply(DISCOUNT_RATE);
+        }
+        discount = discount.setScale(2, RoundingMode.HALF_UP);
+        context.addTrace(name(), "discount=" + discount);
+        return input.withDiscount(discount);
+    }
+}
+```
+
+#### CalculateTaxStage.java
+
+```java
+package chain.pipeline;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+public class CalculateTaxStage implements PipelineStage<OrderProcess> {
+    private static final BigDecimal TAX_RATE = new BigDecimal("0.06");
+
+    @Override
+    public String name() {
+        return "calculate-tax";
+    }
+
+    @Override
+    public OrderProcess process(OrderProcess input, PipelineContext context) {
+        BigDecimal taxableAmount = input.subtotal().subtract(input.discount());
+        BigDecimal tax = taxableAmount
+                .multiply(TAX_RATE)
+                .setScale(2, RoundingMode.HALF_UP);
+        context.addTrace(name(), "tax=" + tax);
+        return input.withTax(tax);
+    }
+}
+```
+
+#### FinalizeOrderStage.java
+
+```java
+package chain.pipeline;
+
+import java.math.BigDecimal;
+
+public class FinalizeOrderStage implements PipelineStage<OrderProcess> {
+    @Override
+    public String name() {
+        return "finalize-order";
+    }
+
+    @Override
+    public OrderProcess process(OrderProcess input, PipelineContext context) {
+        BigDecimal payable = input.subtotal()
+                .subtract(input.discount())
+                .add(input.tax());
+        context.addTrace(name(), "payable=" + payable);
+        return input.complete(payable);
+    }
+}
+```
+
+#### PipelineMain.java
+
+```java
+package chain.pipeline;
+
+import java.math.BigDecimal;
+
+public class PipelineMain {
+    public static void main(String[] args) {
+        ProcessingPipeline<OrderProcess> pipeline = new ProcessingPipeline<OrderProcess>()
+                .addLast(new CalculateSubtotalStage())
+                .addLast(new ApplyDiscountStage())
+                .addLast(new CalculateTaxStage())
+                .addLast(new FinalizeOrderStage());
+
+        OrderProcess order = OrderProcess.draft(
+                "ORDER-001",
+                new BigDecimal("68.00"),
+                2);
+
+        PipelineResult<OrderProcess> result = pipeline.execute(order);
+        result.trace().forEach(System.out::println);
+
+        OrderProcess completed = result.value();
+        System.out.println("orderNo=" + completed.orderNo());
+        System.out.println("subtotal=" + completed.subtotal());
+        System.out.println("discount=" + completed.discount());
+        System.out.println("tax=" + completed.tax());
+        System.out.println("payable=" + completed.payable());
+        System.out.println("status=" + completed.status());
+    }
+}
+```
+
+### 对象如何流过各个节点
+
+初始订单的单价是 `68.00`，数量是 `2`。每个节点看到的是上一个节点的返回值：
+
+| 节点 | 读取的数据 | 新增或变更的数据 |
+| --- | --- | --- |
+| `CalculateSubtotalStage` | `unitPrice=68.00, quantity=2` | `subtotal=136.00` |
+| `ApplyDiscountStage` | `subtotal=136.00` | `discount=13.60` |
+| `CalculateTaxStage` | `subtotal=136.00, discount=13.60` | `tax=7.34` |
+| `FinalizeOrderStage` | `subtotal, discount, tax` | `payable=129.74, status=READY_TO_PAY` |
+
+### 运行结果
+
+```text
+calculate-subtotal: start
+calculate-subtotal: subtotal=136.00
+calculate-subtotal: completed
+apply-discount: start
+apply-discount: discount=13.60
+apply-discount: completed
+calculate-tax: start
+calculate-tax: tax=7.34
+calculate-tax: completed
+finalize-order: start
+finalize-order: payable=129.74
+finalize-order: completed
+orderNo=ORDER-001
+subtotal=136.00
+discount=13.60
+tax=7.34
+payable=129.74
+status=READY_TO_PAY
+```
+
+从轨迹可以看到，没有任何节点调用 `doNext()`，但容器仍然确保四个节点按组装顺序全部执行。
+
+### 责任链与流水线的差异
+
+| 对比项 | 责任链 | 流水线 |
+| --- | --- | --- |
+| 核心目标 | 把请求交给合适的节点处理 | 让多个节点依次加工数据 |
+| 默认执行方式 | 可继续，也可中断 | 正常情况下全部执行 |
+| 推进权 | 节点调用 `doNext()` | 容器自动遍历 |
+| 节点输出 | 可以只处理或记录结果 | 作为下一节点的输入 |
+| 中断语义 | 是正常业务能力 | 通常代表异常或额外的短路策略 |
+| 典型场景 | 校验、请求拦截、权限判定 | 数据清洗、订单计算、文档后处理 |
