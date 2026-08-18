@@ -14,6 +14,8 @@ import java.util.List;
 public class ValidatorContext {
 	private final List<String> errorMessages = new ArrayList<>();
 
+	private boolean shouldStop = false;
+
 	public void appendErrorMessage(String errorMessage) {
 		errorMessages.add(errorMessage);
 	}
@@ -23,5 +25,13 @@ public class ValidatorContext {
 			return;
 		}
 		throw new ValidateException(String.join(";", errorMessages));
+	}
+
+	public boolean shouldStop() {
+		return shouldStop;
+	}
+
+	public void stopChain() {
+		this.shouldStop = true;
 	}
 }

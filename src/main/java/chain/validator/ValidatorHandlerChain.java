@@ -20,6 +20,9 @@ public class ValidatorHandlerChain {
 	public void validate(Object bean, ValidatorContext context) {
 		for (ValidateHandler handler : handlers) {
 			handler.validate(bean, context);
+			if(context.shouldStop()) {
+				break;
+			}
 		}
 		context.throwExceptionIfNecessary();
 	}
