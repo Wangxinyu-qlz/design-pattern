@@ -17,7 +17,7 @@ public class ValidatorHandlerChain {
 		handlers.add(handler);
 	}
 
-	public void validate(Object value) {
+	public ValidatorContext validate(Object value) {
 		ValidatorContext context = new ValidatorContext(value);
 		while(true) {
 			int index = context.getCurrentIndex();
@@ -34,6 +34,6 @@ public class ValidatorHandlerChain {
 			}
 
 		}
-		context.throwExceptionIfNecessary();
+		return context;
 	}
 }

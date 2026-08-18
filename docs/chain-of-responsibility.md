@@ -36,7 +36,7 @@ src/main/java/chain/
 
 先不引入责任链，只完成最小的反射校验闭环。
 
-### `src/main/java/chain/annotation/Length.java`
+   `src/main/java/chain/annotation/Length.java`
 
 ```java
 package chain.annotation;
@@ -53,7 +53,7 @@ public @interface Length {
 }
 ```
 
-### `src/main/java/chain/annotation/Max.java`
+   `src/main/java/chain/annotation/Max.java`
 
 ```java
 package chain.annotation;
@@ -70,7 +70,7 @@ public @interface Max {
 }
 ```
 
-### `src/main/java/chain/annotation/Min.java`
+   `src/main/java/chain/annotation/Min.java`
 
 ```java
 package chain.annotation;
@@ -87,7 +87,7 @@ public @interface Min {
 }
 ```
 
-### `src/main/java/chain/exception/ValidateException.java`
+   `src/main/java/chain/exception/ValidateException.java`
 
 ```java
 package chain.exception;
@@ -99,7 +99,7 @@ public class ValidateException extends RuntimeException {
 }
 ```
 
-### `src/main/java/chain/dto/User.java`
+   `src/main/java/chain/dto/User.java`
 
 ```java
 package chain.dto;
@@ -118,7 +118,7 @@ public record User(
 }
 ```
 
-### `src/main/java/chain/validator/Validator.java`
+   `src/main/java/chain/validator/Validator.java`
 
 ```java
 package chain.validator;
@@ -174,7 +174,7 @@ public class Validator {
 }
 ```
 
-### `src/main/java/chain/Main.java`
+   `src/main/java/chain/Main.java`
 
 ```java
 package chain;
@@ -196,7 +196,7 @@ public class Main {
 
 现在把三个私有方法变成三个类。先定义统一入口。
 
-### `src/main/java/chain/validator/ValidateHandler.java`
+   `src/main/java/chain/validator/ValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -208,7 +208,7 @@ public interface ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/MaxValidateHandler.java`
+   `src/main/java/chain/validator/MaxValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -231,7 +231,7 @@ public class MaxValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/MinValidateHandler.java`
+   `src/main/java/chain/validator/MinValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -254,7 +254,7 @@ public class MinValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/LengthValidateHandler.java`
+   `src/main/java/chain/validator/LengthValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -280,7 +280,7 @@ public class LengthValidateHandler implements ValidateHandler {
 
 `Validator` 改成根据注解创建处理器：
 
-### `src/main/java/chain/validator/Validator.java`
+   `src/main/java/chain/validator/Validator.java`
 
 ```java
 package chain.validator;
@@ -324,7 +324,7 @@ public class Validator {
 
 先增加链容器：
 
-### `src/main/java/chain/validator/ValidatorHandlerChain.java`
+   `src/main/java/chain/validator/ValidatorHandlerChain.java`
 
 ```java
 package chain.validator;
@@ -358,7 +358,7 @@ interface Handler {
 
 `Validator` 只负责组装当前字段的链：
 
-### `src/main/java/chain/validator/Validator.java`
+   `src/main/java/chain/validator/Validator.java`
 
 ```java
 package chain.validator;
@@ -405,7 +405,7 @@ public class Validator {
 
 为了观察同一字段上的多个节点，把测试数据改成矛盾约束：
 
-### `src/main/java/chain/dto/User.java`
+   `src/main/java/chain/dto/User.java`
 
 ```java
 package chain.dto;
@@ -424,7 +424,7 @@ public record User(
 }
 ```
 
-### `src/main/java/chain/Main.java`
+   `src/main/java/chain/Main.java`
 
 ```java
 package chain;
@@ -446,7 +446,7 @@ public class Main {
 
 只改链对象，处理器和接口暂时保持不变。
 
-### `src/main/java/chain/validator/ValidatorHandlerChain.java`
+   `src/main/java/chain/validator/ValidatorHandlerChain.java`
 
 ```java
 package chain.validator;
@@ -507,7 +507,7 @@ public class ValidatorHandlerChain {
 
 先定义上下文：
 
-### `src/main/java/chain/validator/ValidatorContext.java`
+   `src/main/java/chain/validator/ValidatorContext.java`
 
 ```java
 package chain.validator;
@@ -534,7 +534,7 @@ public class ValidatorContext {
 
 接口把上下文传给每个处理器：
 
-### `src/main/java/chain/validator/ValidateHandler.java`
+   `src/main/java/chain/validator/ValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -546,7 +546,7 @@ public interface ValidateHandler {
 
 三个处理器都只记录错误，不再直接抛出校验异常：
 
-### `src/main/java/chain/validator/MaxValidateHandler.java`
+   `src/main/java/chain/validator/MaxValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -567,7 +567,7 @@ public class MaxValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/MinValidateHandler.java`
+   `src/main/java/chain/validator/MinValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -588,7 +588,7 @@ public class MinValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/LengthValidateHandler.java`
+   `src/main/java/chain/validator/LengthValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -612,7 +612,7 @@ public class LengthValidateHandler implements ValidateHandler {
 
 链负责创建上下文、调用处理器、统一抛出：
 
-### `src/main/java/chain/validator/ValidatorHandlerChain.java`
+   `src/main/java/chain/validator/ValidatorHandlerChain.java`
 
 ```java
 package chain.validator;
@@ -637,7 +637,7 @@ public class ValidatorHandlerChain {
 }
 ```
 
-### `src/main/java/chain/validator/Validator.java`
+   `src/main/java/chain/validator/Validator.java`
 
 ```java
 package chain.validator;
@@ -688,7 +688,7 @@ public class Validator {
 
 如果某些规则属于“失败即停止”，可以把停止信号放入上下文。
 
-### `src/main/java/chain/validator/ValidatorContext.java`
+   `src/main/java/chain/validator/ValidatorContext.java`
 
 ```java
 package chain.validator;
@@ -722,7 +722,7 @@ public class ValidatorContext {
 }
 ```
 
-### `src/main/java/chain/validator/MaxValidateHandler.java`
+   `src/main/java/chain/validator/MaxValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -745,7 +745,7 @@ public class MaxValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/ValidatorHandlerChain.java`
+   `src/main/java/chain/validator/ValidatorHandlerChain.java`
 
 ```java
 package chain.validator;
@@ -781,7 +781,7 @@ public class ValidatorHandlerChain {
 
 现在把“继续到下一个节点”从链的 `for` 循环中移到处理器协议中。上下文同时保存当前索引和当前值。
 
-### `src/main/java/chain/validator/ValidatorContext.java`
+   `src/main/java/chain/validator/ValidatorContext.java`
 
 ```java
 package chain.validator;
@@ -834,7 +834,7 @@ public class ValidatorContext {
 }
 ```
 
-### `src/main/java/chain/validator/ValidatorHandlerChain.java`
+   `src/main/java/chain/validator/ValidatorHandlerChain.java`
 
 ```java
 package chain.validator;
@@ -872,7 +872,7 @@ public class ValidatorHandlerChain {
 }
 ```
 
-### `src/main/java/chain/validator/ValidateHandler.java`
+   `src/main/java/chain/validator/ValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -882,7 +882,7 @@ public interface ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/MaxValidateHandler.java`
+   `src/main/java/chain/validator/MaxValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -907,7 +907,7 @@ public class MaxValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/MinValidateHandler.java`
+   `src/main/java/chain/validator/MinValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -929,7 +929,7 @@ public class MinValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/LengthValidateHandler.java`
+   `src/main/java/chain/validator/LengthValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -952,7 +952,7 @@ public class LengthValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/Validator.java`
+   `src/main/java/chain/validator/Validator.java`
 
 ```java
 package chain.validator;
@@ -997,7 +997,7 @@ public class Validator {
 }
 ```
 
-### `src/main/java/chain/dto/User.java`
+   `src/main/java/chain/dto/User.java`
 
 ```java
 package chain.dto;
@@ -1016,7 +1016,7 @@ public record User(
 }
 ```
 
-### `src/main/java/chain/Main.java`
+   `src/main/java/chain/Main.java`
 
 ```java
 package chain;
@@ -1224,7 +1224,7 @@ context.doNext(newValue);
 
 因此 `doNext(19)` 不只是“跳到下一个节点”，还表示“让下一个节点比较新的对象”。
 
-### 你发现"bug"了吗？
+## 你发现"bug"了吗？
 
 在阶段七刚引入 `doNext()` 时，`MinValidateHandler` 和 `LengthValidateHandler` 只在校验失败时推进。那种写法会导致“校验成功即停”。
 
@@ -1232,7 +1232,7 @@ context.doNext(newValue);
 
 现在三个验证处理器都遵守同一个规则：只要输入类型匹配，当前节点无论校验成功还是失败，最后都调用一次 `context.doNext(value)`。
 
-### `src/main/java/chain/validator/MaxValidateHandler.java`
+   `src/main/java/chain/validator/MaxValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -1274,4 +1274,175 @@ Max(10)：18 超过 10，记录错误，doNext(18)
 
 之前 `Max` 失败后没有推进，`Min` 不会执行；现在失败只代表“记录错误”，不再代表“停止链”。
 
-###
+### 优化前字段切换时为什么会停止
+
+即使字段内部的节点都能继续，优化前的 `Validator` 仍然会在每条字段链结束时抛出异常：
+
+```text
+Validator 处理第一个字段
+    -> ValidatorHandlerChain 执行字段链
+    -> 字段链立刻抛出 ValidateException
+    -> Validator 的字段循环被打断
+    -> 后续字段没有机会执行
+```
+
+这里需要把两个层次分开：字段链只负责执行并返回结果，对象级 `Validator` 负责汇总所有字段的错误，最后统一抛出一次异常。每个字段仍然使用独立的 `ValidatorContext`，这样 `index` 和 `value` 不会在字段之间串行污染；对象级只合并错误列表。
+
+   `src/main/java/chain/validator/ValidatorContext.java`
+
+```java
+package chain.validator;
+
+import chain.exception.ValidateException;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ValidatorContext {
+    private final List<String> errorMessages = new ArrayList<>();
+    private boolean shouldStop;
+    private int index;
+    private Object value;
+
+    public ValidatorContext(Object value) {
+        this.value = value;
+    }
+
+    public void appendErrorMessage(String errorMessage) {
+        errorMessages.add(errorMessage);
+    }
+
+    public List<String> getErrorMessages() {
+        return List.copyOf(errorMessages);
+    }
+
+    public void throwExceptionIfNecessary() throws ValidateException {
+        if (!errorMessages.isEmpty()) {
+            throw new ValidateException(String.join(";", errorMessages));
+        }
+    }
+
+    public boolean shouldStop() {
+        return shouldStop;
+    }
+
+    public void stopChain() {
+        shouldStop = true;
+    }
+
+    public int getCurrentIndex() {
+        return index;
+    }
+
+    public Object getValue() {
+        return value;
+    }
+
+    public void doNext(Object value) {
+        index++;
+        this.value = value;
+    }
+}
+```
+
+   `src/main/java/chain/validator/ValidatorHandlerChain.java`
+
+```java
+package chain.validator;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ValidatorHandlerChain {
+    private final List<ValidateHandler> handlers = new ArrayList<>();
+
+    public void addLastHandler(ValidateHandler handler) {
+        handlers.add(handler);
+    }
+
+    public ValidatorContext validate(Object value) {
+        ValidatorContext context = new ValidatorContext(value);
+
+        while (true) {
+            int index = context.getCurrentIndex();
+            if (index == handlers.size()) {
+                break;
+            }
+
+            ValidateHandler handler = handlers.get(index);
+            handler.validate(context.getValue(), context);
+
+            // 当前处理器没有调用 doNext()，字段链停止
+            if (index == context.getCurrentIndex()) {
+                break;
+            }
+        }
+
+        return context;
+    }
+}
+```
+
+   `src/main/java/chain/validator/Validator.java`
+
+```java
+package chain.validator;
+
+import chain.annotation.Length;
+import chain.annotation.Max;
+import chain.annotation.Min;
+import chain.exception.ValidateException;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+
+public class Validator {
+
+    public void validate(Object bean) throws ValidateException, IllegalAccessException {
+        List<String> errorMessages = new ArrayList<>();
+
+        for (Field field : bean.getClass().getDeclaredFields()) {
+            field.setAccessible(true);
+            ValidatorHandlerChain chain = buildHandlerChain(field);
+            ValidatorContext context = chain.validate(field.get(bean));
+            errorMessages.addAll(context.getErrorMessages());
+        }
+
+        if (!errorMessages.isEmpty()) {
+            throw new ValidateException(String.join(";", errorMessages));
+        }
+    }
+
+    private ValidatorHandlerChain buildHandlerChain(Field field) {
+        ValidatorHandlerChain chain = new ValidatorHandlerChain();
+
+        Max max = field.getAnnotation(Max.class);
+        if (max != null) {
+            chain.addLastHandler(new MaxValidateHandler(max.value()));
+        }
+
+        Min min = field.getAnnotation(Min.class);
+        if (min != null) {
+            chain.addLastHandler(new MinValidateHandler(min.value()));
+        }
+
+        Length length = field.getAnnotation(Length.class);
+        if (length != null) {
+            chain.addLastHandler(new LengthValidateHandler(length.value()));
+        }
+
+        return chain;
+    }
+}
+```
+
+优化后的执行结果会从“只看到第一个字段的错误”变为收集所有字段的错误：
+
+```text
+值为18不能大于10;值为18不能小于30;长度为8不能大于4
+```
+
+这次调整只改变异常边界，没有改变字段内部的责任链：字段链仍由 `doNext()` 推进，对象级 `Validator` 只在所有字段处理完后统一判定。
+
+如果后续需要让调用方知道错误属于哪个字段，建议把 `List<String>` 换成结构化结果，例如 `ValidationError(fieldName, ruleName, message)`，最后再将结构化结果格式化成异常消息。这样更适合前端展示、日志检索和错误码扩展。

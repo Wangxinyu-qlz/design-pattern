@@ -28,6 +28,10 @@ public class ValidatorContext {
 		errorMessages.add(errorMessage);
 	}
 
+	public List<String> getErrorMessages() {
+		return List.copyOf(errorMessages);
+	}
+
 	public void throwExceptionIfNecessary() throws ValidateException {
 		if(errorMessages.isEmpty()) {
 			return;
