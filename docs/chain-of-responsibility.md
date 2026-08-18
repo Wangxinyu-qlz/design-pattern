@@ -1224,6 +1224,54 @@ context.doNext(newValue);
 
 因此 `doNext(19)` 不只是“跳到下一个节点”，还表示“让下一个节点比较新的对象”。
 
-### 当前版本中必须注意的行为
+### 你发现"bug"了吗？
 
-`doNext()` 是当前链真正的推进开关。现在 `MinValidateHandler` 和 `LengthValidateHandler` 只在校验失败时调用 `doNext(value)`；校验成功时不推进，所以“校验通过”并不自动意味着“继续下一个节点”。如果业务要求所有规则都继续执行，应把 `doNext(value)` 放到处理完成后的统一位置。
+在阶段七刚引入 `doNext()` 时，`MinValidateHandler` 和 `LengthValidateHandler` 只在校验失败时推进。那种写法会导致“校验成功即停”。
+
+如何解决？
+
+现在三个验证处理器都遵守同一个规则：只要输入类型匹配，当前节点无论校验成功还是失败，最后都调用一次 `context.doNext(value)`。
+
+### `src/main/java/chain/validator/MaxValidateHandler.java`
+
+```java
+package chain.validator;
+
+import chain.exception.ValidateException;
+
+public class MaxValidateHandler implements ValidateHandler {
+    private final int max;
+
+    public MaxValidateHandler(int max) {
+        this.max = max;
+    }
+
+    @Override
+    public void validate(Object value, ValidatorContext context) throws ValidateException {
+        if (value instanceof Integer intValue) {
+            if (intValue > max) {
+                context.appendErrorMessage("值为" + intValue + "不能大于" + max);
+            }
+
+            // 无论是否校验通过，最后都调用一次 doNext
+            context.doNext(value);
+        }
+    }
+}
+```
+`MinValidateHandler` 和 `LengthValidateHandler` 也遵守这个规则。
+
+### 这次调整改变了什么
+
+以当前 `User(18, "qiaolezi")` 为例，年龄链的执行顺序变成：
+
+```text
+Max(10)：18 超过 10，记录错误，doNext(18)
+    -> Min(30)：18 小于 30，记录错误，doNext(18)
+        -> index 到达 handlers.size()，链结束
+        -> 统一抛出两个错误
+```
+
+之前 `Max` 失败后没有推进，`Min` 不会执行；现在失败只代表“记录错误”，不再代表“停止链”。
+
+###
