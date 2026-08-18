@@ -20,8 +20,8 @@ public class LengthValidateHandler implements ValidateHandler {
 		if(value instanceof String StrVal) {
 			if(StrVal.length() > length) {
 				context.appendErrorMessage("长度为" + StrVal.length() + "不能大于" + length);
-				context.doNext(value);
 			}
+			context.doNext(value);
 		}
 	}
 }

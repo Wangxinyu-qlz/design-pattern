@@ -20,8 +20,8 @@ public class MinValidateHandler implements ValidateHandler {
 		if(value instanceof Integer intVal) {
 			if(intVal < min) {
 				context.appendErrorMessage("值为" + intVal + "不能小于" + min);
-				context.doNext(value);
 			}
+			context.doNext(value);
 		}
 	}
 }

@@ -738,6 +738,7 @@ public class MaxValidateHandler implements ValidateHandler {
     public void validate(Object value, ValidatorContext context) {
         if (value instanceof Integer intValue && intValue > max) {
             context.appendErrorMessage("值为" + intValue + "不能大于" + max);
+            // 是否停止链
             context.stopChain();
         }
     }
@@ -897,10 +898,7 @@ public class MaxValidateHandler implements ValidateHandler {
     public void validate(Object value, ValidatorContext context) {
         if (value instanceof Integer intValue && intValue > max) {
             context.appendErrorMessage("值为" + intValue + "不能大于" + max);
-            // 是否停止链：实验时取消注释
-            // context.stopChain();
-
-            // 每次只打开一行，观察下一个节点收到的值
+            // 控制下一个节点处理的对象，
             // context.doNext(value);
             // context.doNext(19);
             // context.doNext(30);
@@ -1034,45 +1032,198 @@ public class Main {
 }
 ```
 
-### 当前版本中必须注意的行为
+## doNext 和 Servlet Filter 的 doFilter
 
-第一，`doNext()` 是当前链真正的推进开关。现在 `MinValidateHandler` 和 `LengthValidateHandler` 只在校验失败时调用 `doNext(value)`；校验成功时不推进，所以“校验通过”并不自动意味着“继续下一个节点”。如果业务要求所有规则都继续执行，应把 `doNext(value)` 放到处理完成后的统一位置。
+`doNext()` 的思想与 Servlet Filter 的 `doFilter()` 是一致的：当前节点处理完请求后，只有显式调用“链对象的继续方法”，后续节点才会被执行；不调用就停在当前节点。
 
-第二，`stopChain()` 的方法仍然存在，但当前链循环只比较索引是否变化，没有再次检查 `context.shouldStop()`。因此：
+先看 Jakarta Servlet 的接口契约。过滤器本身接收一个 `FilterChain`，而不是直接拿到下一个过滤器：
 
-- 不调用 `doNext()` 时，链会因为索引不变而停止；
-- 调用 `doNext()` 时，即使同时调用了 `stopChain()`，当前实现仍会继续；
-- 如果希望停止信号优先，需要在处理器调用之后补回 `if (context.shouldStop()) { break; }`。
-
-## 实验：把运行结果贴在表格中
-
-实验只修改 `MaxValidateHandler` 失败分支，每次只打开一个 `doNext` 调用。当前 `User` 的 `age` 是 18，最大值是 10，最小值是 30，因此是否进入 `MinValidateHandler` 可以从异常消息直接看出来。
-
-| 编号 | `stopChain()` | `doNext(...)` | 传递的值 | 观察重点 | 实际运行结果 |
-| --- | --- | --- | --- | --- | --- |
-| A | 不调用 | 不调用 | 无 | 索引不变，停在最大值节点 | 待粘贴 |
-| B | 调用 | 不调用 | 无 | 当前实现仍因索引不变停止 | 待粘贴 |
-| C | 不调用 | 调用 | 原值 `18` | 最小值节点比较 18 | 待粘贴 |
-| D | 调用 | 调用 | 原值 `18` | 当前实现仍会进入最小值节点 | 待粘贴 |
-| E | 不调用 | 调用 | 新值 `19` | 最小值错误中的比较值变为 19 | 待粘贴 |
-| F | 不调用 | 调用 | 新值 `30` | 最小值节点比较 30，不再产生最小值错误 | 待粘贴 |
-
-每组实验运行：
-
-```bash
-mvn -q -DskipTests package
-java -cp target/classes chain.Main 2>&1
+```java
+public interface Filter {
+    void doFilter(ServletRequest request,
+                  ServletResponse response,
+                  FilterChain chain)
+            throws IOException, ServletException;
+}
 ```
 
-项目要求 JDK 21。建议把每组实验的修改代码、完整控制台输出和结论一起贴在表格的最后一列，不要只记录最终异常文本。
+`FilterChain` 的继续方法是：
 
-## 当前版本的完整源码清单
+```java
+public interface FilterChain {
+    void doFilter(ServletRequest request,
+                  ServletResponse response)
+            throws IOException, ServletException;
+}
+```
 
-当前版本的完整源码就是上面阶段七列出的 10 个文件，另外三个注解和异常类保持阶段一的完整实现：
+一个典型过滤器会这样写：
 
-- `src/main/java/chain/annotation/Length.java`
-- `src/main/java/chain/annotation/Max.java`
-- `src/main/java/chain/annotation/Min.java`
-- `src/main/java/chain/exception/ValidateException.java`
+```java
+public final class AuthenticationFilter implements Filter {
+    @Override
+    public void doFilter(ServletRequest request,
+                         ServletResponse response,
+                         FilterChain chain)
+            throws IOException, ServletException {
+        if (!isAuthenticated(request)) {
+            response.getWriter().write("unauthorized");
+            return;
+        }
 
-这样，从第一阶段到最后阶段的每个新增或变更文件都有完整代码，运行实验时只需要替换对应文件即可。
+        // 继续执行下一个过滤器；不调用就阻断请求
+        chain.doFilter(request, response);
+    }
+
+    private boolean isAuthenticated(ServletRequest request) {
+        return request.getAttribute("user") != null;
+    }
+}
+```
+
+过滤器还可以在继续前后分别处理逻辑：
+
+```java
+public final class TimingFilter implements Filter {
+    @Override
+    public void doFilter(ServletRequest request,
+                         ServletResponse response,
+                         FilterChain chain)
+            throws IOException, ServletException {
+        long start = System.nanoTime();
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            long elapsed = System.nanoTime() - start;
+            System.out.println("elapsed=" + elapsed);
+        }
+    }
+}
+```
+
+真正推进过滤器位置的是容器实现。以 Tomcat 10.1 的 `ApplicationFilterChain` 为例，下面是 `internalDoFilter` 的源码；安全权限和异常包装代码也保留在示例中，便于看清容器真正如何把当前过滤器和链对象连接起来：
+
+```java
+private void internalDoFilter(ServletRequest request, ServletResponse response)
+        throws IOException, ServletException {
+
+    // Call the next filter if there is one
+    if (pos < n) {
+        ApplicationFilterConfig filterConfig = filters[pos++];
+        try {
+            Filter filter = filterConfig.getFilter();
+
+            if (request.isAsyncSupported()
+                    && !filterConfig.getFilterDef().getAsyncSupportedBoolean()) {
+                request.setAttribute(Globals.ASYNC_SUPPORTED_ATTR, Boolean.FALSE);
+            }
+
+            if (Globals.IS_SECURITY_ENABLED) {
+                final ServletRequest req = request;
+                final ServletResponse res = response;
+                Principal principal = ((HttpServletRequest) req).getUserPrincipal();
+                Object[] args = new Object[] { req, res, this };
+                SecurityUtil.doAsPrivilege("doFilter", filter, classType,
+                        args, principal);
+            } else {
+                filter.doFilter(request, response, this);
+            }
+        } catch (IOException | ServletException | RuntimeException e) {
+            throw e;
+        } catch (Throwable t) {
+            t = ExceptionUtils.unwrapInvocationTargetException(t);
+            ExceptionUtils.handleThrowable(t);
+            throw new ServletException(sm.getString("filterChain.filter"), t);
+        }
+        return;
+    }
+
+    // We fell off the end of the chain -- call the servlet instance
+    try {
+        if (dispatcherWrapsSameObject) {
+            lastServicedRequest.set(request);
+            lastServicedResponse.set(response);
+        }
+
+        if (request.isAsyncSupported() && !servletSupportsAsync) {
+            request.setAttribute(Globals.ASYNC_SUPPORTED_ATTR, Boolean.FALSE);
+        }
+
+        // Use potentially wrapped request from this point
+        if ((request instanceof HttpServletRequest)
+                && (response instanceof HttpServletResponse)
+                && Globals.IS_SECURITY_ENABLED) {
+            final ServletRequest req = request;
+            final ServletResponse res = response;
+            Principal principal = ((HttpServletRequest) req).getUserPrincipal();
+            Object[] args = new Object[] { req, res };
+            SecurityUtil.doAsPrivilege("service", servlet,
+                    classTypeUsedInService, args, principal);
+        } else {
+            servlet.service(request, response);
+        }
+    } catch (IOException | ServletException | RuntimeException e) {
+        throw e;
+    } catch (Throwable t) {
+        t = ExceptionUtils.unwrapInvocationTargetException(t);
+        ExceptionUtils.handleThrowable(t);
+        throw new ServletException(sm.getString("filterChain.servlet"), t);
+    } finally {
+        if (dispatcherWrapsSameObject) {
+            lastServicedRequest.set(null);
+            lastServicedResponse.set(null);
+        }
+    }
+}
+```
+
+源码来源：
+
+- [Jakarta Servlet `Filter.java`](https://github.com/jakartaee/servlet/blob/main/api/src/main/java/jakarta/servlet/Filter.java)
+- [Tomcat 10.1 `ApplicationFilterChain.java`](https://github.com/apache/tomcat/blob/10.1.x/java/org/apache/catalina/core/ApplicationFilterChain.java)
+
+这个实现有三个关键点：
+
+1. `pos++` 就是链的游标推进。过滤器拿到的 `this` 仍然是同一个 `FilterChain` 对象，但下一次调用时位置已经变化。
+2. `filter.doFilter(request, response, this)` 把链对象传给当前过滤器。当前过滤器调用 `chain.doFilter(...)`，才会回到容器并执行下一个过滤器。
+3. 当 `pos == n` 时，过滤器链结束，容器调用最终的 `servlet.service(...)`。责任链通常也需要一个明确的终点。
+
+### 和当前 Validator 链的对应关系
+
+| Servlet Filter | 当前 Validator 链 |
+| --- | --- |
+| `ServletRequest` / `ServletResponse` | `ValidatorContext.value` |
+| 当前 `Filter` | 当前 `ValidateHandler` |
+| `FilterChain chain` | `ValidatorContext` 中的索引和 `ValidatorHandlerChain` |
+| `chain.doFilter(request, response)` | `context.doNext(value)` |
+| 不调用 `chain.doFilter` | 不调用 `doNext()` |
+| `pos++` | `index++` |
+| 最后调用 `servlet.service` | `index == handlers.size()`，链结束后检查错误 |
+
+两者的核心控制关系可以写成：
+
+```text
+Filter:
+    当前过滤器处理 request/response
+    -> chain.doFilter(...) 才继续
+    -> 不调用则阻断
+
+Validator:
+    当前处理器处理 value/context
+    -> context.doNext(nextValue) 才继续
+    -> 不调用则停止
+```
+
+但两者不是完全相同的实现。Servlet Filter 通常通过递归调用 `chain.doFilter` 形成“调用前处理、调用后处理”的嵌套结构；当前 Validator 是一个 `while` 循环，每个节点通过修改上下文索引来驱动下一轮循环。前者把继续动作暴露为链对象的方法，后者把继续动作暴露为上下文的方法。
+
+另外，Filter 可以传递包装后的 request/response，这对应当前的：
+
+```java
+context.doNext(newValue);
+```
+
+因此 `doNext(19)` 不只是“跳到下一个节点”，还表示“让下一个节点比较新的对象”。
+
+### 当前版本中必须注意的行为
+
+`doNext()` 是当前链真正的推进开关。现在 `MinValidateHandler` 和 `LengthValidateHandler` 只在校验失败时调用 `doNext(value)`；校验成功时不推进，所以“校验通过”并不自动意味着“继续下一个节点”。如果业务要求所有规则都继续执行，应把 `doNext(value)` 放到处理完成后的统一位置。
