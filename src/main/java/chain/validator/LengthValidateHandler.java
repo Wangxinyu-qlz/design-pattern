@@ -10,9 +10,16 @@ import chain.exception.ValidateException;
  **/
 public class LengthValidateHandler implements ValidateHandler {
 	private final int length;
+	private final int order;
 
-	public LengthValidateHandler(int length) {
+	public LengthValidateHandler(int length, int order) {
 		this.length = length;
+		this.order = order;
+	}
+
+	@Override
+	public int getOrder() {
+		return order;
 	}
 
 	@Override

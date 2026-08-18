@@ -10,9 +10,16 @@ import chain.exception.ValidateException;
  **/
 public class MaxValidateHandler implements ValidateHandler {
 	private final int max;
+	private final int order;
 
-	public MaxValidateHandler(int max) {
+	public MaxValidateHandler(int max, int order) {
 		this.max = max;
+		this.order = order;
+	}
+
+	@Override
+	public int getOrder() {
+		return order;
 	}
 
 	@Override

@@ -33,15 +33,15 @@ public class Validator {
 		ValidatorHandlerChain chain = new ValidatorHandlerChain();
 		Max max = field.getAnnotation(Max.class);
 		if(max != null) {
-			chain.addLastHandler(new MaxValidateHandler(max.value()));
+			chain.addLastHandler(new MaxValidateHandler(max.value(), 10));
 		}
 		Min min = field.getAnnotation(Min.class);
 		if(min != null) {
-			chain.addLastHandler(new MinValidateHandler(min.value()));
+			chain.addLastHandler(new MinValidateHandler(min.value(), 20));
 		}
 		Length length = field.getAnnotation(Length.class);
 		if(length != null) {
-			chain.addLastHandler(new LengthValidateHandler(length.value()));
+			chain.addLastHandler(new LengthValidateHandler(length.value(), 30));
 		}
 		return chain;
 	}

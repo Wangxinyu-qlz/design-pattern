@@ -10,9 +10,16 @@ import chain.exception.ValidateException;
  **/
 public class MinValidateHandler implements ValidateHandler {
 	private final int min;
+	private final int order;
 
-	public MinValidateHandler(int min) {
+	public MinValidateHandler(int min, int order) {
 		this.min = min;
+		this.order = order;
+	}
+
+	@Override
+	public int getOrder() {
+		return order;
 	}
 
 	@Override

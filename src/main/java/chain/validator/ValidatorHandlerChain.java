@@ -1,6 +1,7 @@
 package chain.validator;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -15,6 +16,7 @@ public class ValidatorHandlerChain {
 
 	public void addLastHandler(ValidateHandler handler) {
 		handlers.add(handler);
+		handlers.sort(Comparator.comparingInt(ValidateHandler::getOrder));
 	}
 
 	public void validate(Object value, ValidationContext validationContext) {

@@ -1479,7 +1479,7 @@ Validator 创建一个 ValidationContext
 | `value` | 当前字段链 | 否 |
 | `shouldStop` | 当前字段链 | 否 |
 
-### `src/main/java/chain/validator/ValidationContext.java`
+    `src/main/java/chain/validator/ValidationContext.java`
 
 ```java
 package chain.validator;
@@ -1508,7 +1508,7 @@ public class ValidationContext {
 }
 ```
 
-### `src/main/java/chain/validator/ChainExecutionContext.java`
+    `src/main/java/chain/validator/ChainExecutionContext.java`
 
 ```java
 package chain.validator;
@@ -1557,7 +1557,7 @@ public class ChainExecutionContext {
 }
 ```
 
-### `src/main/java/chain/validator/ValidateHandler.java`
+    `src/main/java/chain/validator/ValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -1569,7 +1569,7 @@ public interface ValidateHandler {
 
 处理器只依赖字段链执行上下文。它可以记录错误，但不直接持有对象级上下文，也不负责最终抛异常。
 
-### `src/main/java/chain/validator/MaxValidateHandler.java`
+    `src/main/java/chain/validator/MaxValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -1596,7 +1596,7 @@ public class MaxValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/MinValidateHandler.java`
+    `src/main/java/chain/validator/MinValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -1623,7 +1623,7 @@ public class MinValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/LengthValidateHandler.java`
+    `src/main/java/chain/validator/LengthValidateHandler.java`
 
 ```java
 package chain.validator;
@@ -1651,7 +1651,7 @@ public class LengthValidateHandler implements ValidateHandler {
 }
 ```
 
-### `src/main/java/chain/validator/ValidatorHandlerChain.java`
+    `src/main/java/chain/validator/ValidatorHandlerChain.java`
 
 ```java
 package chain.validator;
@@ -1688,7 +1688,7 @@ public class ValidatorHandlerChain {
 }
 ```
 
-### `src/main/java/chain/validator/Validator.java`
+    `src/main/java/chain/validator/Validator.java`
 
 ```java
 package chain.validator;
@@ -1745,3 +1745,241 @@ public class Validator {
 ```
 
 需要继续注意：`ValidatorHandlerChain` 当前仍然通过索引是否变化判断停止，尚未把 `shouldStop()` 接入循环；如果后续要求 `stopChain()` 优先于 `doNext()`，应在处理器调用后增加显式的停止判断。
+
+## 对比方案：从 stopChain 版本直接建立总上下文
+
+如果责任链还停留在 `stopChain()` 协议，没有引入 `doNext()`、`index` 和可变的 `value`，确实可以采用更简单的实现：让一个 `ValidatorContext` 从对象校验开始一直传到所有字段链，字段链只负责追加错误，`Validator` 在所有字段完成后调用一次 `throwExceptionIfNecessary()`。
+
+### 总体调用方式
+
+```java
+ValidatorContext context = new ValidatorContext();
+
+for (Field field : declaredFields) {
+    ValidatorHandlerChain chain = buildHandlerChain(field);
+    chain.validate(field.get(bean), context);
+}
+
+context.throwExceptionIfNecessary();
+```
+
+    `ValidatorContext`
+
+```java
+package chain.validator;
+
+import chain.exception.ValidateException;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ValidatorContext {
+    private final List<String> errorMessages = new ArrayList<>();
+    private boolean shouldStop;
+
+    public void appendErrorMessage(String errorMessage) {
+        errorMessages.add(errorMessage);
+    }
+
+    public void throwExceptionIfNecessary() throws ValidateException {
+        if (!errorMessages.isEmpty()) {
+            throw new ValidateException(String.join(";", errorMessages));
+        }
+    }
+
+    public boolean shouldStop() {
+        return shouldStop;
+    }
+
+    public void stopChain() {
+        shouldStop = true;
+    }
+}
+```
+
+    `ValidatorHandlerChain`
+
+```java
+package chain.validator;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ValidatorHandlerChain {
+    private final List<ValidateHandler> handlers = new ArrayList<>();
+
+    public void addLastHandler(ValidateHandler handler) {
+        handlers.add(handler);
+    }
+
+    public void validate(Object value, ValidatorContext context) {
+        for (ValidateHandler handler : handlers) {
+            handler.validate(value, context);
+
+            if (context.shouldStop()) {
+                break;
+            }
+        }
+    }
+}
+```
+
+    `Validator`
+
+```java
+package chain.validator;
+
+import chain.annotation.Length;
+import chain.annotation.Max;
+import chain.annotation.Min;
+import chain.exception.ValidateException;
+
+import java.lang.reflect.Field;
+
+public class Validator {
+
+    public void validate(Object bean)
+            throws ValidateException, IllegalAccessException {
+        ValidatorContext context = new ValidatorContext();
+
+        for (Field field : bean.getClass().getDeclaredFields()) {
+            field.setAccessible(true);
+            ValidatorHandlerChain chain = buildHandlerChain(field);
+            chain.validate(field.get(bean), context);
+        }
+
+        context.throwExceptionIfNecessary();
+    }
+
+    private ValidatorHandlerChain buildHandlerChain(Field field) {
+        ValidatorHandlerChain chain = new ValidatorHandlerChain();
+
+        Max max = field.getAnnotation(Max.class);
+        if (max != null) {
+            chain.addLastHandler(new MaxValidateHandler(max.value()));
+        }
+
+        Min min = field.getAnnotation(Min.class);
+        if (min != null) {
+            chain.addLastHandler(new MinValidateHandler(min.value()));
+        }
+
+        Length length = field.getAnnotation(Length.class);
+        if (length != null) {
+            chain.addLastHandler(new LengthValidateHandler(length.value()));
+        }
+
+        return chain;
+    }
+}
+```
+
+### 这个方案为什么更简单
+
+它的上下文只有两类状态：
+
+- `errorMessages`：整个对象共享；
+- `shouldStop`：由链读取的停止信号。
+
+因为没有 `index` 和 `value`，字段链本身使用 `for` 循环遍历处理器，不需要为每个字段创建独立的执行上下文。因此它可以直接把同一个上下文传给所有字段链，并在对象循环结束后统一抛错。
+
+### 这个方案的边界
+
+1. 它只适合 `stopChain()` 协议。如果 `Max` 调用了 `stopChain()`，共享上下文里的 `shouldStop` 会一直为 `true`；下一个字段的链一开始就可能停止。因此必须先明确 `stopChain()` 的作用域是“停止当前字段链”还是“停止整个对象校验”。
+2. 它不能原样用于当前 `doNext()` 实现。当前上下文还保存 `index` 和 `value`，如果多个字段共享同一个上下文，第二个字段会继承第一个字段的游标和对象值，导致跳过节点或比较错误的对象。
+3. 如果希望保留一个总错误上下文，同时支持当前的 `doNext()`，就需要把执行游标和当前值重新拆出去，也就是上一节的 `ValidationContext + ChainExecutionContext` 方案。
+
+## 知识点：控制链上节点的顺序
+
+当前链虽然通过 `addLastHandler` 组装节点，但“添加的先后”不应该等同于“业务执行顺序”。当校验规则增多、组装逻辑分散到工厂或配置类后，依赖调用顺序会让执行顺序变得隐蔽。
+
+先进行第一步演进：把顺序放到处理器的 `order` 字段中，链只根据字段排序，不再依赖 `addLastHandler` 的调用顺序。
+
+### 处理器增加 order 字段
+
+```java
+public interface ValidateHandler {
+    void validate(Object value, ChainExecutionContext context);
+
+    int getOrder();
+}
+```
+
+以最大值处理器为例：
+
+```java
+public class MaxValidateHandler implements ValidateHandler {
+    private final int max;
+    private final int order;
+
+    public MaxValidateHandler(int max, int order) {
+        this.max = max;
+        this.order = order;
+    }
+
+    @Override
+    public int getOrder() {
+        return order;
+    }
+
+    @Override
+    public void validate(Object value, ChainExecutionContext context) {
+        if (value instanceof Integer intValue) {
+            if (intValue > max) {
+                context.appendErrorMessage("值为" + intValue + "不能大于" + max);
+            }
+            context.doNext(value);
+        }
+    }
+}
+```
+
+`MinValidateHandler` 和 `LengthValidateHandler` 使用同样的 `order` 字段。链在添加节点时排序：
+
+```java
+public class ValidatorHandlerChain {
+    private final List<ValidateHandler> handlers = new ArrayList<>();
+
+    public void addLastHandler(ValidateHandler handler) {
+        handlers.add(handler);
+        handlers.sort(Comparator.comparingInt(ValidateHandler::getOrder));
+    }
+
+    public void validate(Object value, ValidationContext validationContext) {
+        ChainExecutionContext context =
+                new ChainExecutionContext(value, validationContext);
+
+        while (true) {
+            int index = context.getCurrentIndex();
+            if (index == handlers.size()) {
+                break;
+            }
+
+            ValidateHandler handler = handlers.get(index);
+            handler.validate(context.getValue(), context);
+
+            if (index == context.getCurrentIndex()) {
+                break;
+            }
+        }
+    }
+}
+```
+
+组装链时显式指定顺序：
+
+```java
+chain.addLastHandler(new MaxValidateHandler(max.value(), 10));
+chain.addLastHandler(new MinValidateHandler(min.value(), 20));
+chain.addLastHandler(new LengthValidateHandler(length.value(), 30));
+```
+
+把 `Min` 的顺序改成 `5`，它就会在 `Max` 之前执行；即使组装代码仍然按 `Max -> Min -> Length` 添加，实际执行也会按 `order` 排序后的顺序运行。
+
+### 这一阶段的优点和问题
+
+- 优点：执行顺序从调用位置移动到了处理器配置中，链的调度逻辑更明确；
+- 问题：`order` 仍然需要通过构造方法传入，`Validator` 仍然知道每个处理器的顺序数字；
+- 问题：如果多个地方创建同一个处理器，可能传入不同的顺序，顺序规则没有和处理器类型绑定。
+
+因此下一步把顺序从构造参数中抽出来，改用类级别的 `@Order` 注解。
