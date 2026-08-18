@@ -8,6 +8,4 @@ package chain.validator;
  **/
 public interface ValidateHandler {
 	void validate(Object value, ChainExecutionContext context);
-
-	int getOrder();
 }

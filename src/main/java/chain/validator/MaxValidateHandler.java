@@ -1,5 +1,6 @@
 package chain.validator;
 
+import chain.annotation.Order;
 import chain.exception.ValidateException;
 
 /**
@@ -8,18 +9,12 @@ import chain.exception.ValidateException;
  * @create: 2026-08-18 10:50
  * @description:
  **/
+@Order(10)
 public class MaxValidateHandler implements ValidateHandler {
 	private final int max;
-	private final int order;
 
-	public MaxValidateHandler(int max, int order) {
+	public MaxValidateHandler(int max) {
 		this.max = max;
-		this.order = order;
-	}
-
-	@Override
-	public int getOrder() {
-		return order;
 	}
 
 	@Override

@@ -1,5 +1,6 @@
 package chain.validator;
 
+import chain.annotation.Order;
 import chain.exception.ValidateException;
 
 /**
@@ -8,18 +9,12 @@ import chain.exception.ValidateException;
  * @create: 2026-08-18 10:50
  * @description:
  **/
+@Order(30)
 public class LengthValidateHandler implements ValidateHandler {
 	private final int length;
-	private final int order;
 
-	public LengthValidateHandler(int length, int order) {
+	public LengthValidateHandler(int length) {
 		this.length = length;
-		this.order = order;
-	}
-
-	@Override
-	public int getOrder() {
-		return order;
 	}
 
 	@Override

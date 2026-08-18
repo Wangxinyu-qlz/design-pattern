@@ -17,7 +17,8 @@ src/main/java/chain/
 ├── annotation/
 │   ├── Length.java
 │   ├── Max.java
-│   └── Min.java
+│   ├── Min.java
+│   └── Order.java
 ├── dto/User.java
 ├── exception/ValidateException.java
 └── validator/
@@ -1983,3 +1984,152 @@ chain.addLastHandler(new LengthValidateHandler(length.value(), 30));
 - 问题：如果多个地方创建同一个处理器，可能传入不同的顺序，顺序规则没有和处理器类型绑定。
 
 因此下一步把顺序从构造参数中抽出来，改用类级别的 `@Order` 注解。
+
+### 定义 @Order 注解
+
+```java
+package chain.annotation;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Order {
+    int value();
+}
+```
+
+### 把顺序声明在处理器类上
+
+```java
+@Order(10)
+public class MaxValidateHandler implements ValidateHandler {
+    private final int max;
+
+    public MaxValidateHandler(int max) {
+        this.max = max;
+    }
+
+    @Override
+    public void validate(Object value, ChainExecutionContext context) {
+        if (value instanceof Integer intValue) {
+            if (intValue > max) {
+                context.appendErrorMessage("值为" + intValue + "不能大于" + max);
+            }
+            context.doNext(value);
+        }
+    }
+}
+```
+
+`MinValidateHandler` 和 `LengthValidateHandler` 分别声明 `@Order(20)`、`@Order(30)`，构造方法只接收自己的校验参数：
+
+```java
+@Order(20)
+public class MinValidateHandler implements ValidateHandler {
+    private final int min;
+
+    public MinValidateHandler(int min) {
+        this.min = min;
+    }
+
+    @Override
+    public void validate(Object value, ChainExecutionContext context) {
+        if (value instanceof Integer intValue) {
+            if (intValue < min) {
+                context.appendErrorMessage("值为" + intValue + "不能小于" + min);
+            }
+            context.doNext(value);
+        }
+    }
+}
+```
+
+```java
+@Order(30)
+public class LengthValidateHandler implements ValidateHandler {
+    private final int length;
+
+    public LengthValidateHandler(int length) {
+        this.length = length;
+    }
+
+    @Override
+    public void validate(Object value, ChainExecutionContext context) {
+        if (value instanceof String stringValue) {
+            if (stringValue.length() > length) {
+                context.appendErrorMessage(
+                        "长度为" + stringValue.length() + "不能大于" + length);
+            }
+            context.doNext(value);
+        }
+    }
+}
+```
+
+### 链读取注解并排序
+
+```java
+public class ValidatorHandlerChain {
+    private final List<ValidateHandler> handlers = new ArrayList<>();
+
+    public void addLastHandler(ValidateHandler handler) {
+        handlers.add(handler);
+        handlers.sort(Comparator.comparingInt(this::getOrder));
+    }
+
+    private int getOrder(ValidateHandler handler) {
+        Order order = handler.getClass().getAnnotation(Order.class);
+        if (order == null) {
+            throw new IllegalArgumentException(
+                    "Missing @Order on " + handler.getClass().getName());
+        }
+        return order.value();
+    }
+
+    public void validate(Object value, ValidationContext validationContext) {
+        ChainExecutionContext context =
+                new ChainExecutionContext(value, validationContext);
+
+        while (true) {
+            int index = context.getCurrentIndex();
+            if (index == handlers.size()) {
+                break;
+            }
+
+            ValidateHandler handler = handlers.get(index);
+            handler.validate(context.getValue(), context);
+
+            if (index == context.getCurrentIndex()) {
+                break;
+            }
+        }
+    }
+}
+```
+
+`Validator` 的组装代码因此变成：
+
+```java
+if (max != null) {
+    chain.addLastHandler(new MaxValidateHandler(max.value()));
+}
+if (min != null) {
+    chain.addLastHandler(new MinValidateHandler(min.value()));
+}
+if (length != null) {
+    chain.addLastHandler(new LengthValidateHandler(length.value()));
+}
+```
+
+### 两步演进的对比
+
+| 阶段 | 顺序来源 | 组装代码 | 优点 | 代价 |
+| --- | --- | --- | --- | --- |
+| 第一步 | 处理器 `order` 字段 | `new MaxValidateHandler(value, 10)` | 改动直接，容易理解 | 构造方法暴露调度参数，调用方仍然管理顺序数字 |
+| 第二步 | 处理器类上的 `@Order` | `new MaxValidateHandler(value)` | 顺序声明和处理器绑定，组装代码更干净 | 依赖运行时注解读取，需要处理缺少注解的情况 |
+
+第二步更适合责任链节点由工厂、扫描器或依赖注入容器创建的场景：创建者只负责提供处理器实例，链负责统一解释 `@Order` 并排序。当前实现对没有 `@Order` 的处理器直接抛出 `IllegalArgumentException`，可以尽早暴露配置错误。

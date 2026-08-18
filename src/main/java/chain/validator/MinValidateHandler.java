@@ -1,5 +1,6 @@
 package chain.validator;
 
+import chain.annotation.Order;
 import chain.exception.ValidateException;
 
 /**
@@ -8,18 +9,12 @@ import chain.exception.ValidateException;
  * @create: 2026-08-18 10:50
  * @description:
  **/
+@Order(20)
 public class MinValidateHandler implements ValidateHandler {
 	private final int min;
-	private final int order;
 
-	public MinValidateHandler(int min, int order) {
+	public MinValidateHandler(int min) {
 		this.min = min;
-		this.order = order;
-	}
-
-	@Override
-	public int getOrder() {
-		return order;
 	}
 
 	@Override
