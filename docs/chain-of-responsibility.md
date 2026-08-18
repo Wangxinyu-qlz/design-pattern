@@ -2133,3 +2133,124 @@ if (length != null) {
 | 第二步 | 处理器类上的 `@Order` | `new MaxValidateHandler(value)` | 顺序声明和处理器绑定，组装代码更干净 | 依赖运行时注解读取，需要处理缺少注解的情况 |
 
 第二步更适合责任链节点由工厂、扫描器或依赖注入容器创建的场景：创建者只负责提供处理器实例，链负责统一解释 `@Order` 并排序。当前实现对没有 `@Order` 的处理器直接抛出 `IllegalArgumentException`，可以尽早暴露配置错误。
+
+## Spring 中的 @Order 写法
+
+上面的 `chain.annotation.Order` 是项目自定义注解。Spring 已经提供了同名但不同包的注解：
+
+```java
+import org.springframework.core.annotation.Order;
+```
+
+Spring 的 `@Order` 使用规则是数值越小优先级越高。它主要用于 Spring 管理的组件排序，例如将多个处理器注入 `List<ValidateHandler>` 时，Spring 会根据 `@Order` 排列集合中的元素。
+
+### 组件方式
+
+```java
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+@Component
+@Order(10)
+public class MaxValidateHandler implements ValidateHandler {
+    @Override
+    public void validate(Object value, ChainExecutionContext context) {
+        // 最大值校验
+        context.doNext(value);
+    }
+}
+```
+
+```java
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+@Component
+@Order(20)
+public class MinValidateHandler implements ValidateHandler {
+    @Override
+    public void validate(Object value, ChainExecutionContext context) {
+        // 最小值校验
+        context.doNext(value);
+    }
+}
+```
+
+链可以直接接收 Spring 排好序的处理器列表：
+
+```java
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+@Component
+public class SpringValidatorHandlerChain {
+    private final List<ValidateHandler> handlers;
+
+    public SpringValidatorHandlerChain(List<ValidateHandler> handlers) {
+        this.handlers = List.copyOf(handlers);
+    }
+
+    public void validate(Object value, ValidationContext validationContext) {
+        ChainExecutionContext context =
+                new ChainExecutionContext(value, validationContext);
+
+        for (ValidateHandler handler : handlers) {
+            handler.validate(context.getValue(), context);
+            // 具体的 doNext 判断仍由责任链协议负责
+        }
+    }
+}
+```
+
+这里的顺序来源不再是链中的 `handlers.sort(...)`，而是 Spring 的集合注入排序：
+
+```text
+Spring 扫描 @Component
+    -> 读取每个处理器的 @Order
+    -> 按 order 排序
+    -> 注入 List<ValidateHandler>
+    -> 责任链按列表顺序执行
+```
+
+### @Bean 方法方式
+
+如果处理器不是组件类，也可以在配置类的 `@Bean` 方法上声明顺序：
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+
+@Configuration
+public class ValidatorHandlerConfiguration {
+
+    @Bean
+    @Order(10)
+    public ValidateHandler maxValidateHandler() {
+        return new MaxValidateHandler(10);
+    }
+
+    @Bean
+    @Order(20)
+    public ValidateHandler minValidateHandler() {
+        return new MinValidateHandler(30);
+    }
+}
+```
+
+### 和当前项目的差异
+
+Spring 写法只需要 Spring Framework 的 `spring-context` 等依赖，不要求使用 Spring Boot；但当前项目没有引入 Spring，因此上述代码只作为文档对比，不能直接编译运行。
+
+另外，当前项目的 `MaxValidateHandler`、`MinValidateHandler` 和 `LengthValidateHandler` 都携带字段上的具体规则参数，例如 `@Max(10)`、`@Min(30)`。如果把它们直接注册成单例 Bean，就无法同时表示不同字段上的不同阈值。实际接入 Spring 时，通常应该注入带 `@Order` 的处理器工厂或规则模板，再由字段链根据注解创建带参数的执行实例：
+
+```java
+public interface ValidateHandlerFactory {
+    boolean supports(Field field);
+
+    ValidateHandler create(Field field);
+}
+```
+
+因此，Spring 的 `@Order` 解决的是“容器如何排列 Bean”，而当前自定义 `@Order` 解决的是“责任链如何排列本次字段校验节点”。两者可以使用相同的数值约定，但负责排序的对象和生命周期不同。
