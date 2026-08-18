@@ -5,10 +5,10 @@ import chain.annotation.Max;
 import chain.annotation.Min;
 
 public record User(
+		@Max(10)
+		@Min(30)
+		Integer age,
 		@Length(4)
-		String name,
-		@Max(100)
-		@Min(1)
-		Integer age
+		String name
 ) {
 }

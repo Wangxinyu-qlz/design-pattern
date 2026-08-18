@@ -6,6 +6,8 @@ import chain.annotation.Min;
 import chain.exception.ValidateException;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @program: study
@@ -20,19 +22,26 @@ public class Validator {
 		Field[] declaredFields = beanClass.getDeclaredFields();
 		for (Field field : declaredFields) {
 			field.setAccessible(true);
-			Object value = field.get(bean);
-			Max max = field.getAnnotation(Max.class);
-			if(max != null) {
-				new MaxValidateHandler(max.value()).validate(value);
-			}
-			Min min = field.getAnnotation(Min.class);
-			if(min != null) {
-				new MinValidateHandler(min.value()).validate(value);
-			}
-			Length length = field.getAnnotation(Length.class);
-			if(length != null) {
-				new LengthValidateHandler(length.value()).validate(value);
-			}
+			ValidatorHandlerChain chain = buildHandlerChain(field);
+			chain.validate(field.get(bean));
 		}
+	}
+
+	// 可以使用享元模式/工厂模式等进行优化
+	private ValidatorHandlerChain buildHandlerChain(Field field) {
+		ValidatorHandlerChain chain = new ValidatorHandlerChain();
+		Max max = field.getAnnotation(Max.class);
+		if(max != null) {
+			chain.addLastHandler(new MaxValidateHandler(max.value()));
+		}
+		Min min = field.getAnnotation(Min.class);
+		if(min != null) {
+			chain.addLastHandler(new MinValidateHandler(min.value()));
+		}
+		Length length = field.getAnnotation(Length.class);
+		if(length != null) {
+			chain.addLastHandler(new LengthValidateHandler(length.value()));
+		}
+		return chain;
 	}
 }

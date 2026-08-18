@@ -11,7 +11,7 @@ import chain.validator.Validator;
  **/
 public class Main {
 	public static void main(String[] args) throws IllegalAccessException {
-		User qiaolezi = new User("qiaolezi", 18);
+		User qiaolezi = new User(18,"qiaolezi");
 		new Validator().validate(qiaolezi);
 	}
 }
