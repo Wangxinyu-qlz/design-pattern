@@ -348,7 +348,7 @@ public class ValidatorHandlerChain {
     }
 }
 ```
-用数组还是链表都可以。每个处理器内部保存 next，那就是“链表式责任链”，甚至不需要 List。这种方式适合节点之间直接传递控制权。
+用数组还是链表都可以。每个处理器内部保存 next，那就是“链表式责任链”，甚至不需要 List，这种方式适合节点之间直接传递控制权。
 
 ```java
 interface Handler {
@@ -442,7 +442,7 @@ public class Main {
 }
 ```
 
-此时链已经存在，但处理器抛出的第一个异常仍会跳出 `for` 循环。要让同一字段上的所有节点都有机会执行，需要集中处理错误。
+此时链已经存在，但处理器抛出的第一个异常仍会跳出 `for` 循环。如果需要收集所有异常，怎么做？
 
 ## 阶段四：在链里收集多个异常
 
@@ -483,7 +483,9 @@ public class ValidatorHandlerChain {
 }
 ```
 
-这样 `age = 18` 会同时得到最大值和最小值错误，但这只是一个能工作的过渡版本。它把“校验失败”当成了异常控制流：
+这样 `age = 18` 会同时得到最大值和最小值错误。
+
+但这只是一个能工作的过渡版本，因为它把“校验失败”当成了异常控制流：
 
 ```text
 执行节点 -> 抛出异常 -> 链捕获异常 -> 保存消息 -> 继续执行
@@ -499,11 +501,6 @@ public class ValidatorHandlerChain {
 
 1. 校验失败是预期结果，不一定是系统异常。每条规则都创建异常、捕获异常，正常校验流程反而依赖异常机制。
 2. `ValidateHandler` 被异常协议绑定。处理器必须声明 `throws ValidateException`，链也必须知道捕获哪一种异常；如果以后要返回警告、修正后的值或其他结果，接口会继续膨胀。
-3. 这更像“异常聚合循环”，还不是完整的责任链协议。节点没有 `doNext()`，不能传递变换后的对象，也没有让节点主动中断的标准入口；当前代码会无条件尝试执行所有节点。
-4. 错误聚合范围仍然只是一个字段。外层 `Validator` 每处理完一个字段就调用一次 `chain.validate`，链重新抛出异常后，后续字段不会继续校验。因此它可以同时收集 `age` 的最大值和最小值错误，却不能收集 `age` 和 `name` 两个字段的全部错误。
-5. 重新抛出时只保留 `exception.getMessage()`，原始异常的堆栈、原因和具体处理器信息都被丢弃了。以后如果需要定位“哪个字段的哪个规则失败”，单纯拼接字符串也不够用。
-
-所以阶段四适合用来说明“如何让同一字段上的多个规则都执行”，但不适合作为最终设计。下一步需要把预期的校验结果从异常控制流中分离出来：处理器把错误写入上下文，链负责调度，最后再由上下文统一决定是否抛出异常。同时，上下文也为后面的 `stopChain()`、`doNext()`、当前值和索引提供了统一的位置。
 
 ## 阶段五：用 ValidatorContext 传递错误
 
@@ -684,7 +681,7 @@ public class Validator {
 }
 ```
 
-这个版本的上下文是字段级的：每个字段重新创建一个 `ValidatorContext`，所以第一个失败字段的链抛出异常后，外层对象校验也会停止。
+这个版本的上下文是字段级的：每个字段重新创建一个 `ValidatorContext`，所以第一个失败字段的链抛出异常后，外层对象校验也会停止，如何收集所有字段的异常呢？后文揭晓。
 
 ## 阶段六：给上下文增加 stopChain()
 
@@ -1034,7 +1031,7 @@ public class Main {
 }
 ```
 
-## doNext 和 Servlet Filter 的 doFilter
+### doNext 和 Servlet Filter 的 doFilter
 
 `doNext()` 的思想与 Servlet Filter 的 `doFilter()` 是一致的：当前节点处理完请求后，只有显式调用“链对象的继续方法”，后续节点才会被执行；不调用就停在当前节点。
 
@@ -1188,7 +1185,7 @@ private void internalDoFilter(ServletRequest request, ServletResponse response)
 
 1. `pos++` 就是链的游标推进。过滤器拿到的 `this` 仍然是同一个 `FilterChain` 对象，但下一次调用时位置已经变化。
 2. `filter.doFilter(request, response, this)` 把链对象传给当前过滤器。当前过滤器调用 `chain.doFilter(...)`，才会回到容器并执行下一个过滤器。
-3. 当 `pos == n` 时，过滤器链结束，容器调用最终的 `servlet.service(...)`。责任链通常也需要一个明确的终点。
+3. 当 `pos == n` 时，过滤器链结束，容器调用最终的 `servlet.service(...)`。
 
 ### 和当前 Validator 链的对应关系
 
@@ -1224,7 +1221,7 @@ Validator:
 context.doNext(newValue);
 ```
 
-因此 `doNext(19)` 不只是“跳到下一个节点”，还表示“让下一个节点比较新的对象”。
+因此 `doNext(19)` 不只是“跳到下一个节点”，还表示“当前节点处理完->**后处理**->下一个节点处理”。
 
 ## 你发现"bug"了吗？
 
@@ -1276,9 +1273,9 @@ Max(10)：18 超过 10，记录错误，doNext(18)
 
 之前 `Max` 失败后没有推进，`Min` 不会执行；现在失败只代表“记录错误”，不再代表“停止链”。
 
-### 第一种方案的边界：优化前字段切换时为什么会停止
+## 如何收集所有字段的校验异常？
 
-即使字段内部的节点都能继续，优化前的 `Validator` 仍然会在每条字段链结束时抛出异常：
+即使字段内部的节点都能继续，`Validator` 仍然会在每条字段链结束时抛出异常：
 
 ```text
 Validator 处理第一个字段
@@ -1288,7 +1285,11 @@ Validator 处理第一个字段
     -> 后续字段没有机会执行
 ```
 
-这里需要把两个层次分开：字段链只负责执行并返回结果，对象级 `Validator` 负责汇总所有字段的错误，最后统一抛出一次异常。每个字段仍然使用独立的 `ValidatorContext`，这样 `index` 和 `value` 不会在字段之间串行污染；对象级只合并错误列表。
+### 方案一
+
+把两个层次分开：字段链只负责执行并返回结果，对象级 `Validator` 负责汇总所有字段的错误，最后统一抛出一次异常。
+
+每个字段仍然使用独立的 `ValidatorContext`，这样 `index` 和 `value` 不会在字段之间串行污染；对象级只合并错误列表。
 
    `src/main/java/chain/validator/ValidatorContext.java`
 
@@ -1445,11 +1446,7 @@ public class Validator {
 值为18不能大于10;值为18不能小于30;长度为8不能大于4
 ```
 
-这次调整只改变异常边界，没有改变字段内部的责任链：字段链仍由 `doNext()` 推进，对象级 `Validator` 只在所有字段处理完后统一判定。
-
-如果后续需要让调用方知道错误属于哪个字段，建议把 `List<String>` 换成结构化结果，例如 `ValidationError(fieldName, ruleName, message)`，最后再将结构化结果格式化成异常消息。这样更适合前端展示、日志检索和错误码扩展。
-
-## 第二种解决方案：总上下文与字段链执行上下文分离
+### 方案二：总上下文与字段链执行上下文分离
 
 上一节的做法已经能聚合所有字段错误，但 `Validator` 需要从字段上下文中取出错误列表，再自己组织最终异常。更完整的设计是建立一个对象级总上下文：
 
@@ -1747,11 +1744,11 @@ public class Validator {
 
 需要继续注意：`ValidatorHandlerChain` 当前仍然通过索引是否变化判断停止，尚未把 `shouldStop()` 接入循环；如果后续要求 `stopChain()` 优先于 `doNext()`，应在处理器调用后增加显式的停止判断。
 
-## 对比方案：从 stopChain 版本直接建立总上下文
+### 方案三：从 stopChain 版本直接建立总上下文
 
 如果责任链还停留在 `stopChain()` 协议，没有引入 `doNext()`、`index` 和可变的 `value`，确实可以采用更简单的实现：让一个 `ValidatorContext` 从对象校验开始一直传到所有字段链，字段链只负责追加错误，`Validator` 在所有字段完成后调用一次 `throwExceptionIfNecessary()`。
 
-### 总体调用方式
+#### 总体调用方式
 
 ```java
 ValidatorContext context = new ValidatorContext();
@@ -1875,7 +1872,7 @@ public class Validator {
 }
 ```
 
-### 这个方案为什么更简单
+#### 这个方案为什么更简单
 
 它的上下文只有两类状态：
 
@@ -1884,19 +1881,21 @@ public class Validator {
 
 因为没有 `index` 和 `value`，字段链本身使用 `for` 循环遍历处理器，不需要为每个字段创建独立的执行上下文。因此它可以直接把同一个上下文传给所有字段链，并在对象循环结束后统一抛错。
 
-### 这个方案的边界
+#### 这个方案的边界
 
 1. 它只适合 `stopChain()` 协议。如果 `Max` 调用了 `stopChain()`，共享上下文里的 `shouldStop` 会一直为 `true`；下一个字段的链一开始就可能停止。因此必须先明确 `stopChain()` 的作用域是“停止当前字段链”还是“停止整个对象校验”。
 2. 它不能原样用于当前 `doNext()` 实现。当前上下文还保存 `index` 和 `value`，如果多个字段共享同一个上下文，第二个字段会继承第一个字段的游标和对象值，导致跳过节点或比较错误的对象。
 3. 如果希望保留一个总错误上下文，同时支持当前的 `doNext()`，就需要把执行游标和当前值重新拆出去，也就是上一节的 `ValidationContext + ChainExecutionContext` 方案。
 
-## 知识点：控制链上节点的顺序
+## 如何控制链上节点的顺序？
 
 当前链虽然通过 `addLastHandler` 组装节点，但“添加的先后”不应该等同于“业务执行顺序”。当校验规则增多、组装逻辑分散到工厂或配置类后，依赖调用顺序会让执行顺序变得隐蔽。
 
 先进行第一步演进：把顺序放到处理器的 `order` 字段中，链只根据字段排序，不再依赖 `addLastHandler` 的调用顺序。
 
-### 处理器增加 order 字段
+### 第一步：使用 order 字段
+
+#### 处理器增加 order 字段
 
 ```java
 public interface ValidateHandler {
@@ -1935,7 +1934,11 @@ public class MaxValidateHandler implements ValidateHandler {
 }
 ```
 
-`MinValidateHandler` 和 `LengthValidateHandler` 使用同样的 `order` 字段。链在添加节点时排序：
+`MinValidateHandler` 和 `LengthValidateHandler` 使用同样的 `order` 字段。
+
+#### 链根据 order 字段排序
+
+链在添加节点时排序：
 
 ```java
 public class ValidatorHandlerChain {
@@ -1977,7 +1980,7 @@ chain.addLastHandler(new LengthValidateHandler(length.value(), 30));
 
 把 `Min` 的顺序改成 `5`，它就会在 `Max` 之前执行；即使组装代码仍然按 `Max -> Min -> Length` 添加，实际执行也会按 `order` 排序后的顺序运行。
 
-### 这一阶段的优点和问题
+#### 这一阶段的优点和问题
 
 - 优点：执行顺序从调用位置移动到了处理器配置中，链的调度逻辑更明确；
 - 问题：`order` 仍然需要通过构造方法传入，`Validator` 仍然知道每个处理器的顺序数字；
@@ -1985,7 +1988,9 @@ chain.addLastHandler(new LengthValidateHandler(length.value(), 30));
 
 因此下一步把顺序从构造参数中抽出来，改用类级别的 `@Order` 注解。
 
-### 定义 @Order 注解
+### 第二步：使用自定义 @Order 注解
+
+#### 定义 @Order 注解
 
 ```java
 package chain.annotation;
@@ -2002,7 +2007,7 @@ public @interface Order {
 }
 ```
 
-### 把顺序声明在处理器类上
+#### 把顺序声明在处理器类上
 
 ```java
 @Order(10)
@@ -2070,7 +2075,7 @@ public class LengthValidateHandler implements ValidateHandler {
 }
 ```
 
-### 链读取注解并排序
+#### 链读取注解并排序
 
 ```java
 public class ValidatorHandlerChain {
@@ -2125,16 +2130,7 @@ if (length != null) {
 }
 ```
 
-### 两步演进的对比
-
-| 阶段 | 顺序来源 | 组装代码 | 优点 | 代价 |
-| --- | --- | --- | --- | --- |
-| 第一步 | 处理器 `order` 字段 | `new MaxValidateHandler(value, 10)` | 改动直接，容易理解 | 构造方法暴露调度参数，调用方仍然管理顺序数字 |
-| 第二步 | 处理器类上的 `@Order` | `new MaxValidateHandler(value)` | 顺序声明和处理器绑定，组装代码更干净 | 依赖运行时注解读取，需要处理缺少注解的情况 |
-
-第二步更适合责任链节点由工厂、扫描器或依赖注入容器创建的场景：创建者只负责提供处理器实例，链负责统一解释 `@Order` 并排序。当前实现对没有 `@Order` 的处理器直接抛出 `IllegalArgumentException`，可以尽早暴露配置错误。
-
-## Spring 中的 @Order 写法
+### 扩展方案：使用 Spring 的 @Order
 
 上面的 `chain.annotation.Order` 是项目自定义注解。Spring 已经提供了同名但不同包的注解：
 
@@ -2144,7 +2140,7 @@ import org.springframework.core.annotation.Order;
 
 Spring 的 `@Order` 使用规则是数值越小优先级越高。它主要用于 Spring 管理的组件排序，例如将多个处理器注入 `List<ValidateHandler>` 时，Spring 会根据 `@Order` 排列集合中的元素。
 
-### 组件方式
+#### 组件方式
 
 ```java
 import org.springframework.core.annotation.Order;
@@ -2213,7 +2209,7 @@ Spring 扫描 @Component
     -> 责任链按列表顺序执行
 ```
 
-### @Bean 方法方式
+#### @Bean 方法方式
 
 如果处理器不是组件类，也可以在配置类的 `@Bean` 方法上声明顺序：
 
@@ -2239,7 +2235,7 @@ public class ValidatorHandlerConfiguration {
 }
 ```
 
-### 和当前项目的差异
+#### 和当前项目的差异
 
 Spring 写法只需要 Spring Framework 的 `spring-context` 等依赖，不要求使用 Spring Boot；但当前项目没有引入 Spring，因此上述代码只作为文档对比，不能直接编译运行。
 
