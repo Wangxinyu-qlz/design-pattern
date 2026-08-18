@@ -19,10 +19,9 @@ public class Validator {
 		Class<?> beanClass = bean.getClass();
 		Field[] declaredFields = beanClass.getDeclaredFields();
 		for (Field field : declaredFields) {
-			ValidatorContext context = new ValidatorContext();
 			field.setAccessible(true);
 			ValidatorHandlerChain chain = buildHandlerChain(field);
-			chain.validate(field.get(bean), context);
+			chain.validate(field.get(bean));
 		}
 	}
 

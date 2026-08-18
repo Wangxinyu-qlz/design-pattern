@@ -20,7 +20,8 @@ public class MaxValidateHandler implements ValidateHandler {
 		if(value instanceof Integer intVal) {
 			if(intVal > max) {
 				context.appendErrorMessage("值为" + intVal + "不能大于" + max);
-				context.stopChain();
+				// 当前节点处理完对象，可以先修改对象再传给下一个节点
+				//context.doNext(19);
 			}
 		}
 	}

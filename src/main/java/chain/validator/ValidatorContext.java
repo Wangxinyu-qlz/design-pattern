@@ -16,6 +16,14 @@ public class ValidatorContext {
 
 	private boolean shouldStop = false;
 
+	private int index;
+
+	private Object value;
+
+	public ValidatorContext(Object value) {
+		this.value = value;
+	}
+
 	public void appendErrorMessage(String errorMessage) {
 		errorMessages.add(errorMessage);
 	}
@@ -33,5 +41,18 @@ public class ValidatorContext {
 
 	public void stopChain() {
 		this.shouldStop = true;
+	}
+
+	public int getCurrentIndex() {
+		return index;
+	}
+
+	public Object getValue() {
+		return value;
+	}
+
+	public void doNext(Object value) {
+		index++;
+		this.value = value;
 	}
 }

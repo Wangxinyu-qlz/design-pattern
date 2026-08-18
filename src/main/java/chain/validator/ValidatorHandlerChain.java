@@ -17,12 +17,22 @@ public class ValidatorHandlerChain {
 		handlers.add(handler);
 	}
 
-	public void validate(Object bean, ValidatorContext context) {
-		for (ValidateHandler handler : handlers) {
-			handler.validate(bean, context);
-			if(context.shouldStop()) {
+	public void validate(Object value) {
+		ValidatorContext context = new ValidatorContext(value);
+		while(true) {
+			int index = context.getCurrentIndex();
+			if(index == handlers.size()) {
 				break;
 			}
+
+			ValidateHandler handler = handlers.get(index);
+			handler.validate(context.getValue(), context);
+
+			// 说明当前handler没有调用doNext()，索引未增加
+			if(index == context.getCurrentIndex()) {
+				break;
+			}
+
 		}
 		context.throwExceptionIfNecessary();
 	}
