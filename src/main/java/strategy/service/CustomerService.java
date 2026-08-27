@@ -7,6 +7,7 @@ package strategy.service;
  * @description:
  **/
 public interface CustomerService {
+	boolean support(Integer recharge);
 
 	String getCustomer();
 }
