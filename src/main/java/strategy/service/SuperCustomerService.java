@@ -10,7 +10,6 @@ import strategy.enums.UserTypeEnum;
  * @create: 2026-08-27 14:53
  * @description:
  **/
-@Order(1)
 @Component
 public class SuperCustomerService implements CustomerService {
 
