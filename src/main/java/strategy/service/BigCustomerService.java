@@ -1,6 +1,7 @@
 package strategy.service;
 
 import org.springframework.stereotype.Component;
+import strategy.annotation.SupportUserType;
 import strategy.enums.UserTypeEnum;
 
 /**
@@ -10,12 +11,8 @@ import strategy.enums.UserTypeEnum;
  * @description:
  **/
 @Component
+@SupportUserType(UserTypeEnum.BIG)
 public class BigCustomerService implements CustomerService {
-
-	@Override
-	public UserTypeEnum support() {
-		return UserTypeEnum.BIG;
-	}
 
 	@Override
 	public String getCustomer() {

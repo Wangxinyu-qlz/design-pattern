@@ -1,6 +1,7 @@
 package strategy.service;
 
 import org.springframework.stereotype.Component;
+import strategy.annotation.SupportUserType;
 import strategy.enums.UserTypeEnum;
 
 /**
@@ -10,12 +11,8 @@ import strategy.enums.UserTypeEnum;
  * @description: 如果需要添加策略，只需要实现CustomerService接口，通过@Component注入到容器中，然后分别实现support和getCustomer方法
  **/
 @Component
+@SupportUserType(UserTypeEnum.PERSONAL)
 public class PersonalCustomerService implements CustomerService {
-
-	@Override
-	public UserTypeEnum support() {
-		return UserTypeEnum.PERSONAL;
-	}
 
 	@Override
 	public String getCustomer() {

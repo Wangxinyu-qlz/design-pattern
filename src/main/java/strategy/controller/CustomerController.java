@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import strategy.annotation.SupportUserType;
 import strategy.enums.UserTypeEnum;
 import strategy.service.CustomerService;
 import strategy.service.DefaultCustomerService;
@@ -37,11 +38,15 @@ public class CustomerController {
 	@Autowired
 	public void setCustomerServiceMap(List<CustomerService> customerServices) {
 		this.customerServiceMap = customerServices.stream()
-				.filter(customerService -> customerService.support()!=null)
-				.collect(Collectors.toMap(CustomerService::support, Function.identity()));
+				.filter(customerService -> customerService.getClass().isAnnotationPresent(SupportUserType.class))
+				.collect(Collectors.toMap(this::getUserTypeFromService, Function.identity()));
 		//customerServices.forEach(customerService -> customerServiceMap.put(customerService.support(), customerService));
 		if(this.customerServiceMap.size() != UserTypeEnum.values().length) {
 			throw new IllegalArgumentException("有用户类型没有对应的策略");
 		}
+	}
+
+	private UserTypeEnum getUserTypeFromService(CustomerService customerService) {
+		return customerService.getClass().getAnnotation(SupportUserType.class).value();
 	}
 }

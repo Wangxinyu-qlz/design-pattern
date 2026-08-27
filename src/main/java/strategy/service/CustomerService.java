@@ -1,7 +1,5 @@
 package strategy.service;
 
-import strategy.enums.UserTypeEnum;
-
 /**
  * @program: study
  * @author: Qiaolezi
@@ -9,7 +7,6 @@ import strategy.enums.UserTypeEnum;
  * @description:
  **/
 public interface CustomerService {
-	UserTypeEnum support();
 
 	String getCustomer();
 }
