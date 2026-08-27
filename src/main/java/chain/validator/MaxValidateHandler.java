@@ -1,7 +1,7 @@
 package chain.validator;
 
-import chain.annotation.Order;
 import chain.exception.ValidateException;
+import org.springframework.core.annotation.Order;
 
 /**
  * @program: study
