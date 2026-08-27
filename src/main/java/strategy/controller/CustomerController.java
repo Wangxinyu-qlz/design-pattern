@@ -40,5 +40,8 @@ public class CustomerController {
 				.filter(customerService -> customerService.support()!=null)
 				.collect(Collectors.toMap(CustomerService::support, Function.identity()));
 		//customerServices.forEach(customerService -> customerServiceMap.put(customerService.support(), customerService));
+		if(this.customerServiceMap.size() != UserTypeEnum.values().length) {
+			throw new IllegalArgumentException("有用户类型没有对应的策略");
+		}
 	}
 }
