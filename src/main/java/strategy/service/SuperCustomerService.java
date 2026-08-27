@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class SuperCustomerService implements CustomerService {
 	@Override
 	public boolean support(Integer recharge) {
-		return recharge >= 10000;
+		return recharge >= 10000 && recharge < 100_0000;
 	}
 
 	@Override
