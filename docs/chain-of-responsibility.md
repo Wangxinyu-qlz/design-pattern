@@ -2248,7 +2248,7 @@ public class ValidatorHandlerConfiguration {
 
 #### 和当前项目的差异
 
-Spring 写法只需要 Spring Framework 的 `spring-context` 等依赖，不要求使用 Spring Boot；但当前项目没有引入 Spring，因此上述代码只作为文档对比，不能直接编译运行。
+当前项目已经升级为 Spring Boot，并实际采用了 Spring 的排序能力。由于处理器携带字段上的具体规则参数，项目没有把 `MaxValidateHandler` 等直接注册为单例组件，而是注册带 `@Order` 的 `ValidateHandlerFactory`：Spring 先对工厂列表排序，`Validator` 再根据字段注解创建本次校验所需的处理器。
 
 另外，当前项目的 `MaxValidateHandler`、`MinValidateHandler` 和 `LengthValidateHandler` 都携带字段上的具体规则参数，例如 `@Max(10)`、`@Min(30)`。如果把它们直接注册成单例 Bean，就无法同时表示不同字段上的不同阈值。实际接入 Spring 时，通常应该注入带 `@Order` 的处理器工厂或规则模板，再由字段链根据注解创建带参数的执行实例：
 
@@ -2260,7 +2260,7 @@ public interface ValidateHandlerFactory {
 }
 ```
 
-因此，Spring 的 `@Order` 解决的是“容器如何排列 Bean”，而当前自定义 `@Order` 解决的是“责任链如何排列本次字段校验节点”。两者可以使用相同的数值约定，但负责排序的对象和生命周期不同。
+因此，Spring 的 `@Order` 解决的是“容器如何排列工厂 Bean”，责任链则按注入列表顺序执行本次字段校验节点。顺序规则与工厂类型绑定，处理器实例仍然可以携带字段级参数。
 
 ## 另一条演进方向：从责任链到流水线
 
