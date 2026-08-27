@@ -2,6 +2,7 @@ package strategy.service;
 
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import strategy.enums.UserTypeEnum;
 
 /**
  * @program: study
@@ -14,8 +15,8 @@ import org.springframework.stereotype.Component;
 public class BigCustomerService implements CustomerService {
 
 	@Override
-	public boolean support(Integer recharge) {
-		return recharge >= 100 && recharge < 10000;
+	public UserTypeEnum support() {
+		return UserTypeEnum.BIG;
 	}
 
 	@Override

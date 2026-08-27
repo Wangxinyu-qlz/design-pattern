@@ -1,5 +1,7 @@
 package strategy.service;
 
+import strategy.enums.UserTypeEnum;
+
 /**
  * @program: study
  * @author: Qiaolezi
@@ -7,7 +9,7 @@ package strategy.service;
  * @description:
  **/
 public interface CustomerService {
-	boolean support(Integer recharge);
+	UserTypeEnum support();
 
 	String getCustomer();
 }

@@ -2,6 +2,7 @@ package strategy.service;
 
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import strategy.enums.UserTypeEnum;
 
 /**
  * @program: study
@@ -12,9 +13,10 @@ import org.springframework.stereotype.Component;
 @Order(2)
 @Component
 public class DefaultCustomerService implements CustomerService {
+
 	@Override
-	public boolean support(Integer recharge) {
-		return true;
+	public UserTypeEnum support() {
+		return null;
 	}
 
 	@Override
