@@ -1900,6 +1900,15 @@ public class Validator {
 
 ## 如何控制链上节点的顺序？
 
+本节的代码演进对应以下独立提交，便于按步骤学习和回看：
+
+| 演进步骤 | 提交 |
+| --- | --- |
+| 使用 `order` 字段 | `f0034fd` |
+| 使用自定义 `chain.annotation.Order` | `ec4af58` |
+| 使用 Spring `org.springframework.core.annotation.Order` | `dadc258` |
+| 由 Spring 注入有序工厂列表 | `f3d3eca` |
+
 当前链虽然通过 `addLastHandler` 组装节点，但“添加的先后”不应该等同于“业务执行顺序”。当校验规则增多、组装逻辑分散到工厂或配置类后，依赖调用顺序会让执行顺序变得隐蔽。
 
 先进行第一步演进：把顺序放到处理器的 `order` 字段中，链只根据字段排序，不再依赖 `addLastHandler` 的调用顺序。
