@@ -1,11 +1,10 @@
 package chain.validator;
 
-import chain.annotation.Length;
-import chain.annotation.Max;
-import chain.annotation.Min;
 import chain.exception.ValidateException;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.lang.reflect.Field;
+import java.util.List;
 
 /**
  * @program: study
@@ -14,6 +13,17 @@ import java.lang.reflect.Field;
  * @description:
  **/
 public class Validator {
+	private final List<ValidateHandlerFactory> handlerFactories;
+
+	public Validator() {
+		this(List.of(new MaxValidateHandlerFactory(), new MinValidateHandlerFactory(),
+				new LengthValidateHandlerFactory()));
+	}
+
+	@Autowired
+	public Validator(List<ValidateHandlerFactory> handlerFactories) {
+		this.handlerFactories = List.copyOf(handlerFactories);
+	}
 
 	public void validate(Object bean) throws ValidateException, IllegalAccessException {
 		Class<?> beanClass = bean.getClass();
@@ -30,19 +40,11 @@ public class Validator {
 
 	// 可以使用享元模式/工厂模式等进行优化
 	private ValidatorHandlerChain buildHandlerChain(Field field) {
-		ValidatorHandlerChain chain = new ValidatorHandlerChain();
-		Max max = field.getAnnotation(Max.class);
-		if(max != null) {
-			chain.addLastHandler(new MaxValidateHandler(max.value()));
-		}
-		Min min = field.getAnnotation(Min.class);
-		if(min != null) {
-			chain.addLastHandler(new MinValidateHandler(min.value()));
-		}
-		Length length = field.getAnnotation(Length.class);
-		if(length != null) {
-			chain.addLastHandler(new LengthValidateHandler(length.value()));
-		}
+		List<ValidateHandler> handlers = handlerFactories.stream()
+				.filter(factory -> factory.supports(field))
+				.map(factory -> factory.create(field))
+				.toList();
+		ValidatorHandlerChain chain = new ValidatorHandlerChain(handlers);
 		return chain;
 	}
 }

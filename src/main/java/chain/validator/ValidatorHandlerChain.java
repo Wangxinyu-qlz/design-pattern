@@ -1,9 +1,5 @@
 package chain.validator;
 
-import chain.annotation.Order;
-
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -14,20 +10,10 @@ import java.util.List;
  **/
 public class ValidatorHandlerChain {
 
-	private final List<ValidateHandler> handlers = new ArrayList<>();
+	private final List<ValidateHandler> handlers;
 
-	public void addLastHandler(ValidateHandler handler) {
-		handlers.add(handler);
-		handlers.sort(Comparator.comparingInt(this::getOrder));
-	}
-
-	private int getOrder(ValidateHandler handler) {
-		Order order = handler.getClass().getAnnotation(Order.class);
-		if(order == null) {
-			throw new IllegalArgumentException(
-					"Missing @Order on " + handler.getClass().getName());
-		}
-		return order.value();
+	public ValidatorHandlerChain(List<ValidateHandler> handlers) {
+		this.handlers = List.copyOf(handlers);
 	}
 
 	public void validate(Object value, ValidationContext validationContext) {
