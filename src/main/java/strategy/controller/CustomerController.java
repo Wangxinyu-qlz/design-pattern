@@ -1,5 +1,6 @@
 package strategy.controller;
 
+import chain.exception.ValidateException;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +30,6 @@ public class CustomerController {
 				return customerService.getCustomer();
 			}
 		}
-		return "未知客服";
+		throw new ValidateException("No customer found for recharge: " + recharge);
 	}
 }

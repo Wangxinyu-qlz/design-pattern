@@ -9,16 +9,16 @@ import org.springframework.stereotype.Component;
  * @create: 2026-08-27 14:53
  * @description:
  **/
-@Order(1)
+@Order(2)
 @Component
-public class NormalCustomerService implements CustomerService {
+public class DefaultCustomerService implements CustomerService {
 	@Override
 	public boolean support(Integer recharge) {
-		return recharge >= 10 && recharge < 100;
+		return true;
 	}
 
 	@Override
 	public String getCustomer() {
-		return "Normal Customer";
+		return "default Customer";
 	}
 }
