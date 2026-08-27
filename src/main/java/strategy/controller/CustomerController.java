@@ -39,14 +39,10 @@ public class CustomerController {
 	public void setCustomerServiceMap(List<CustomerService> customerServices) {
 		this.customerServiceMap = customerServices.stream()
 				.filter(customerService -> customerService.getClass().isAnnotationPresent(SupportUserType.class))
-				.collect(Collectors.toMap(this::getUserTypeFromService, Function.identity()));
+				.collect(Collectors.toMap(service -> service.getUserTypeFromService(service), Function.identity()));
 		//customerServices.forEach(customerService -> customerServiceMap.put(customerService.support(), customerService));
 		if(this.customerServiceMap.size() != UserTypeEnum.values().length) {
 			throw new IllegalArgumentException("有用户类型没有对应的策略");
 		}
-	}
-
-	private UserTypeEnum getUserTypeFromService(CustomerService customerService) {
-		return customerService.getClass().getAnnotation(SupportUserType.class).value();
 	}
 }

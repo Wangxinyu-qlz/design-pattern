@@ -1,5 +1,8 @@
 package strategy.service;
 
+import strategy.annotation.SupportUserType;
+import strategy.enums.UserTypeEnum;
+
 /**
  * @program: study
  * @author: Qiaolezi
@@ -7,6 +10,9 @@ package strategy.service;
  * @description:
  **/
 public interface CustomerService {
+	default UserTypeEnum getUserTypeFromService(CustomerService customerService) {
+		return customerService.getClass().getAnnotation(SupportUserType.class).value();
+	}
 
 	String getCustomer();
 }
