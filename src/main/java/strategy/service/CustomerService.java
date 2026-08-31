@@ -10,8 +10,8 @@ import strategy.enums.UserTypeEnum;
  * @description:
  **/
 public interface CustomerService {
-	default UserTypeEnum getUserTypeFromService(CustomerService customerService) {
-		return customerService.getClass().getAnnotation(SupportUserType.class).value();
+	default UserTypeEnum getUserTypeFromService() {
+		return this.getClass().getAnnotation(SupportUserType.class).value();
 	}
 
 	String getCustomer();
